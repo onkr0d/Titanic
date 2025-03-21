@@ -12,6 +12,10 @@ const FileUploader = () => {
     const [files, setFiles] = useState<FileState[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const isValidVideoFile = (file: File) => {
+        return file.type.startsWith('video/');
+    };
+
     const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.stopPropagation();
@@ -41,9 +45,10 @@ const FileUploader = () => {
     };
 
     const handleFiles = (newFiles: File[]) => {
-        setFiles(prev => [...prev, ...newFiles.map(file => ({
+        const validFiles = newFiles.filter(isValidVideoFile);
+        setFiles(prev => [...prev, ...validFiles.map(file => ({
             file,
-            id: Math.random().toString(36).substr(2, 9),
+            id: Math.random().toString(36).substring(2, 11),
             status: 'ready' as const
         }))]);
     };
@@ -77,15 +82,16 @@ const FileUploader = () => {
                 <div className="flex flex-col items-center justify-center text-center">
                     <UploadCloud className="w-12 h-12 text-gray-400 mb-4" />
                     <h3 className="text-lg font-semibold mb-2">
-                        Drag & drop files here
+                        Drag & drop video files here
                     </h3>
                     <p className="text-sm text-gray-500 mb-4">
-                        or click to select files
+                        or click to select video files
                     </p>
                     <input
                         ref={fileInputRef}
                         type="file"
                         multiple
+                        accept="video/*"
                         className="hidden"
                         onChange={(e) => handleFiles(Array.from(e.target.files || []))}
                     />

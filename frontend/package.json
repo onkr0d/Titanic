@@ -37,6 +37,8 @@
     "vite": "^6.0.5"
   },
   "trustedDependencies": [
-    "@firebase/util"
+    "@firebase/util",
+    "esbuild",
+    "protobufjs"
   ]
 }

@@ -42,6 +42,18 @@ const App = () => {
         try {
             const result = await signInWithPopup(auth, provider);
             console.log("User email:", result.user.email);
+            toast.success("Signed in with Google", {
+                position: "top-right",
+                autoClose: 5000,
+                hideProgressBar: false,
+                closeOnClick: true,
+                pauseOnFocusLoss: false,
+                pauseOnHover: false,
+                draggable: true,
+                progress: undefined,
+                theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+                transition: Slide,
+            });
         } catch (error: any) {
             let errorMessage = "Error signing in with Google";
             
@@ -110,8 +122,11 @@ const App = () => {
     }
 
     return (
-        <div className="min-h-screen w-full flex items-center justify-center">
-            <FileUploader/>
+        <div>
+            <ToastContainer draggablePercent={60}/>
+            <div className="min-h-screen w-full flex items-center justify-center">
+                <FileUploader/>
+            </div>
         </div>
     );
 };

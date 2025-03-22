@@ -26,6 +26,6 @@ export const onlyAuthUsers = beforeUserCreated((event) => {
         logger.info("User email:", email);
         return;
     }
-    logger.error("Unauthorized user!");
-    throw new HttpsError('permission-denied', 'Unauthorized user!');
+    logger.error("Unauthorized user: " + email);
+    throw new HttpsError('permission-denied', 'You are not a fish, nor a squid!');
 });

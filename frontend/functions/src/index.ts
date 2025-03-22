@@ -22,7 +22,14 @@ export const helloWorld = onRequest((request, response) => {
 
 export const onlyAuthUsers = beforeUserCreated((event) => {
     const email = event.data?.email;
-    if (email == "[REDACTED]" || email == "[REDACTED]") {
+    if (!email) {
+        logger.error("No email provided");
+        throw new HttpsError('permission-denied', 'No email provided');
+    }
+
+    const allowedEmails = process.env.ALLOWED_EMAILS?.split(',') || [];
+
+    if (allowedEmails.includes(email)) {
         logger.info("User email:", email);
         return;
     }

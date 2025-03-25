@@ -1,20 +1,28 @@
 # Use the official Python image as a base
-FROM python:3.13.0b4-slim
+FROM python:alpine
 
 # Set the working directory inside the container
 WORKDIR /app
 
+# Install system dependencies including Redis
+RUN apk add --no-cache \
+    redis \
+    ffmpeg
+
 # Copy only requirements.txt first for caching dependencies
 COPY requirements.txt .
 
-# Install dependencies
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code into the container
 COPY . .
 
-# Expose port 5000 for Flask
-EXPOSE 5000
+# Make the startup script executable
+RUN chmod +x start.sh
 
-# Command to run the application
-CMD ["python", "app.py"]
+# Expose ports for Flask and Redis
+EXPOSE 5000 6379
+
+# Run the startup script
+CMD ["./start.sh"]

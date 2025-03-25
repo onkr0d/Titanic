@@ -1,10 +1,12 @@
 import React, { useState, useRef } from 'react';
 import { UploadCloud, X, FileText, CheckCircle } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 interface FileState {
     file: File;
     id: string;
-    status: 'ready' | 'uploading' | 'uploaded';
+    status: 'ready' | 'uploading' | 'uploaded' | 'error';
+    error?: string;
 }
 
 const FileUploader = () => {
@@ -46,6 +48,9 @@ const FileUploader = () => {
 
     const handleFiles = (newFiles: File[]) => {
         const validFiles = newFiles.filter(isValidVideoFile);
+        if (validFiles.length !== newFiles.length) {
+            toast.error('Some files were skipped because they are not valid video files');
+        }
         setFiles(prev => [...prev, ...validFiles.map(file => ({
             file,
             id: Math.random().toString(36).substring(2, 11),
@@ -58,12 +63,57 @@ const FileUploader = () => {
     }
 
     const uploadFiles = async () => {
-        // Simulate file upload - replace with actual upload logic
-        setFiles(prev => prev.map(f => ({ ...f, status: 'uploading' })));
+        const readyFiles = files.filter(f => f.status === 'ready');
+        if (readyFiles.length === 0) return;
 
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        // Update status to uploading for all ready files
+        setFiles(prev => prev.map(f => 
+            f.status === 'ready' ? { ...f, status: 'uploading' } : f
+        ));
 
-        setFiles(prev => prev.map(f => ({ ...f, status: 'uploaded' })));
+        try {
+            // Upload all files in parallel
+            const uploadPromises = readyFiles.map(async ({ file, id }) => {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const response = await fetch('http://localhost:1302/upload', {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Upload failed');
+                    }
+
+                    const data = await response.json();
+                    
+                    // Update file status to uploaded
+                    setFiles(prev => prev.map(f => 
+                        f.id === id ? { ...f, status: 'uploaded' } : f
+                    ));
+
+                    toast.success(`Successfully uploaded ${file.name}`);
+                } catch (error) {
+                    // Update file status to error
+                    setFiles(prev => prev.map(f => 
+                        f.id === id ? { 
+                            ...f, 
+                            status: 'error',
+                            error: error instanceof Error ? error.message : 'Upload failed'
+                        } : f
+                    ));
+                    toast.error(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                }
+            });
+
+            await Promise.all(uploadPromises);
+        } catch (error) {
+            console.error('Upload error:', error);
+            toast.error('An error occurred during upload');
+        }
     };
 
     return (
@@ -101,20 +151,35 @@ const FileUploader = () => {
             {files.length > 0 && (
                 <div className="mt-6">
                     <div className="space-y-3">
-                        {files.map(({ file, id, status }) => (
+                        {files.map(({ file, id, status, error }) => (
                             <div
                                 key={id}
                                 className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                             >
                                 <div className="flex items-center space-x-3">
                                     <FileText className="w-5 h-5 text-gray-400" />
-                                    <span className="text-sm font-medium text-gray-900">{file.name}</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-medium text-gray-900">{file.name}</span>
+                                        {error && (
+                                            <span className="text-xs text-red-500">{error}</span>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="flex items-center space-x-2">
                                     {status === 'uploaded' ? (
                                         <CheckCircle className="w-5 h-5 text-green-500" />
                                     ) : status === 'uploading' ? (
                                         <div className="w-5 h-5 border-2 border-t-blue-500 rounded-full animate-spin" />
+                                    ) : status === 'error' ? (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                removeFile(id);
+                                            }}
+                                            className="p-1 hover:bg-gray-200 rounded"
+                                        >
+                                            <X className="w-4 h-4 text-red-500" />
+                                        </button>
                                     ) : (
                                         <button
                                             onClick={(e) => {

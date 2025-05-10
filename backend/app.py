@@ -9,7 +9,7 @@ from pathlib import Path
 from jobs.job import compress_video, upload_video_to_umbrel
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes 
-# FIME: don't do that ^
+# FIXME: don't do that ^
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,4 @@
-import { AuthError, User } from "firebase/auth";
+import { User } from "firebase/auth";
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { getAuth, connectAuthEmulator} from "firebase/auth";
 import FileUploader from "./components/FileUploader";

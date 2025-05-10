@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # frontend
+  - package-ecosystem: "bun"
+    directory: "frontend/"
+    schedule:
+      interval: "daily"
+
+  # cloud functions
+  # google cloud run doesn't support bun :(
+  - package-ecosystem: "npm"
+    directory: "frontend/functions/"
+    schedule:
+      interval: "weekly"
+
+  # backend flask
+  - package-ecosystem: "pip"
+    directory: "backend/"
+    schedule:
+      interval: "weekly"
+
+  # backend docker  
+  - package-ecosystem: "docker"
+    directory: "backend/"
+    schedule:
+      interval: "weekly"

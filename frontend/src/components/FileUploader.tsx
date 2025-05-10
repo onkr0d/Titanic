@@ -87,8 +87,6 @@ const FileUploader = () => {
                         const errorData = await response.json();
                         throw new Error(errorData.error || 'Upload failed');
                     }
-
-                    const data = await response.json();
                     
                     // Update file status to uploaded
                     setFiles(prev => prev.map(f => 

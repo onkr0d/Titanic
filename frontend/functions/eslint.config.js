@@ -1,5 +1,9 @@
-export default [
+module.exports = [
     {
-      files: ["**/*.js", "**/*.ts"],
+        files: ['**/*.js'],
+        rules: {
+            'no-unused-vars': 'warn',
+            'no-console': 'off',
+        },
     },
-  ];
+];

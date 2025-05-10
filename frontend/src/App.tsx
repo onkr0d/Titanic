@@ -30,7 +30,11 @@ const App = () => {
 
     useEffect(() => {
         const auth = getAuth();
-        connectAuthEmulator(auth, "http://127.0.0.1:9099");
+        // use emulator if in dev
+        const isDev = process.env.NODE_ENV === "development";
+        if (isDev) {
+            connectAuthEmulator(auth, "http://127.0.0.1:9099");
+        }
         onAuthStateChanged(auth, (user) => {
             setUser(user);
         });

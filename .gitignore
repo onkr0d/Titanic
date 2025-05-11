@@ -1,2 +1,3 @@
 frontend/functions/.env
 /frontend/.firebase
+backend/admin-sdk-cred.json

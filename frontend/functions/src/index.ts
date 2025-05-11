@@ -28,5 +28,5 @@ export const onlyAuthUsers = beforeUserCreated((event) => {
         return;
     }
     logger.error("Unauthorized user: " + email);
-    throw new HttpsError('permission-denied', 'You are not a fish, nor a squid!');
+    throw new HttpsError('permission-denied', 'you are not a fish, nor a squid!');
 });

@@ -7,11 +7,20 @@ import logging
 from flask_cors import CORS
 from pathlib import Path
 from jobs.job import compress_video, upload_video_to_umbrel
+import firebase_admin
+from firebase_admin import credentials, auth
+from functools import wraps
+
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes 
 # FIXME: don't do that ^
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+# Initialize Firebase Admin
+cred_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'admin-sdk-cred.json')
+cred = credentials.Certificate(cred_path)
+firebase_admin.initialize_app(cred)
 
 # Configure upload settings
 UPLOAD_FOLDER = os.path.abspath('uploads')  # Convert to absolute path
@@ -24,6 +33,26 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 ffmpeg_queue = Queue('ffmpeg', connection=Redis())
 umbrel_queue = Queue('umbrel', connection=Redis())
+
+def verify_firebase_token(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'No authorization token provided'}), 401
+
+        token = auth_header.split('Bearer ')[1]
+        try:
+            # Verify the ID token
+            decoded_token = auth.verify_id_token(token)
+            # Add the user info to the request context
+            request.user = decoded_token
+            return f(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Token verification failed: {str(e)}")
+            return jsonify({'error': 'Invalid authorization token'}), 401
+
+    return decorated_function
 
 def allowed_file(filename):
     # Check for null bytes
@@ -44,15 +73,11 @@ def is_safe_path(filepath):
     except Exception:
         return False
 
-@app.route("/")
-def home():
-    # this is the backend! gg!
-    return "Secure HTTPS server running!"
-
 @app.route("/upload", methods=['POST'])
+@verify_firebase_token
 def upload_video():
     try:
-        logger.debug("Received upload request")
+        logger.debug(f"Received upload request from user: {request.user.get('email', 'unknown')}")
         if 'file' not in request.files:
             logger.error("No file part in request")
             return jsonify({'error': 'No file part'}), 400

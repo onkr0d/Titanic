@@ -15,6 +15,10 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy the Firebase credentials file first and set permissions
+COPY admin-sdk-cred.json .
+RUN chmod 600 admin-sdk-cred.json
+
 # Copy the rest of the application code into the container
 COPY . .
 

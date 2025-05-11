@@ -67,7 +67,7 @@ const App = () => {
                     // Extract the error message from the function response
                     const match = error.message.match(/{"error":{"message":"([^"]+)"/);
                     if (match) {
-                        errorMessage = "Server error: " + match[1];
+                        errorMessage += ": " + match[1];
                     }
                 } catch (e) {
                     console.error("Error parsing error message:", e);

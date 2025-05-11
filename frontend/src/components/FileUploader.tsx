@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { UploadCloud, X, FileText, CheckCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { uploadVideo } from '../utils/api';
 
 interface FileState {
     file: File;
@@ -67,43 +68,33 @@ const FileUploader = () => {
         if (readyFiles.length === 0) return;
 
         // Update status to uploading for all ready files
-        setFiles(prev => prev.map(f => 
+        setFiles(prev => prev.map(f =>
             f.status === 'ready' ? { ...f, status: 'uploading' } : f
         ));
 
         try {
             // Upload all files in parallel
             const uploadPromises = readyFiles.map(async ({ file, id }) => {
-                const formData = new FormData();
-                formData.append('file', file);
+                const result = await uploadVideo(file);
 
-                try {
-                    const response = await fetch('http://localhost:1302/upload', {
-                        method: 'POST',
-                        body: formData,
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.error || 'Upload failed');
-                    }
-                    
+                if (result.success) {
                     // Update file status to uploaded
-                    setFiles(prev => prev.map(f => 
+                    setFiles(prev => prev.map(f =>
                         f.id === id ? { ...f, status: 'uploaded' } : f
                     ));
-
-                    toast.success(`Successfully uploaded ${file.name}`);
-                } catch (error) {
+                    toast.success(`Successfully uploaded ${file.name}`, {
+                        pauseOnFocusLoss: false,
+                    });
+                } else {
                     // Update file status to error
-                    setFiles(prev => prev.map(f => 
-                        f.id === id ? { 
-                            ...f, 
+                    setFiles(prev => prev.map(f =>
+                        f.id === id ? {
+                            ...f,
                             status: 'error',
-                            error: error instanceof Error ? error.message : 'Upload failed'
+                            error: result.error
                         } : f
                     ));
-                    toast.error(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                    toast.error(`Failed to upload ${file.name}: ${result.error}`);
                 }
             });
 
@@ -117,9 +108,8 @@ const FileUploader = () => {
     return (
         <div className="w-full max-w-xl mx-auto p-6">
             <div
-                className={`border-2 border-dashed rounded-lg p-8 ${
-                    isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-                }`}
+                className={`border-2 border-dashed rounded-lg p-8 ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                    }`}
                 onDragEnter={handleDragEnter}
                 onDragOver={handleDragEnter}
                 onDragLeave={handleDragLeave}

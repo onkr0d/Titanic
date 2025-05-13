@@ -108,8 +108,11 @@ const FileUploader = () => {
     return (
         <div className="w-full max-w-xl mx-auto p-6">
             <div
-                className={`border-2 border-dashed rounded-lg p-8 ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-                    }`}
+                className={`border-2 border-dashed rounded-lg p-8 ${
+                    isDragging 
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                        : 'border-gray-300 dark:border-gray-700'
+                }`}
                 onDragEnter={handleDragEnter}
                 onDragOver={handleDragEnter}
                 onDragLeave={handleDragLeave}
@@ -118,11 +121,11 @@ const FileUploader = () => {
                 onClick={() => fileInputRef.current?.click()}
             >
                 <div className="flex flex-col items-center justify-center text-center">
-                    <UploadCloud className="w-12 h-12 text-gray-400 mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">
+                    <UploadCloud className="w-12 h-12 text-gray-400 dark:text-gray-500 mb-4" />
+                    <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">
                         Drag & drop video files here
                     </h3>
-                    <p className="text-sm text-gray-500 mb-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                         or click to select video files
                     </p>
                     <input
@@ -142,14 +145,14 @@ const FileUploader = () => {
                         {files.map(({ file, id, status, error }) => (
                             <div
                                 key={id}
-                                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
                             >
                                 <div className="flex items-center space-x-3">
-                                    <FileText className="w-5 h-5 text-gray-400" />
+                                    <FileText className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                                     <div className="flex flex-col">
-                                        <span className="text-sm font-medium text-gray-900">{file.name}</span>
+                                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{file.name}</span>
                                         {error && (
-                                            <span className="text-xs text-red-500">{error}</span>
+                                            <span className="text-xs text-red-500 dark:text-red-400">{error}</span>
                                         )}
                                     </div>
                                 </div>
@@ -164,7 +167,7 @@ const FileUploader = () => {
                                                 e.stopPropagation();
                                                 removeFile(id);
                                             }}
-                                            className="p-1 hover:bg-gray-200 rounded"
+                                            className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
                                         >
                                             <X className="w-4 h-4 text-red-500" />
                                         </button>
@@ -174,7 +177,7 @@ const FileUploader = () => {
                                                 e.stopPropagation();
                                                 removeFile(id);
                                             }}
-                                            className="p-1 hover:bg-gray-200 rounded"
+                                            className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
                                         >
                                             <X className="w-4 h-4 text-gray-500" />
                                         </button>
@@ -190,7 +193,7 @@ const FileUploader = () => {
                                 e.stopPropagation();
                                 uploadFiles();
                             }}
-                            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 w-full"
+                            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 dark:hover:bg-blue-700 w-full"
                         >
                             Upload Files
                         </button>

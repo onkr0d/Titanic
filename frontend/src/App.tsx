@@ -93,12 +93,12 @@ const App = () => {
 
     if (!user) {
         return (
-            <div>
+            <div className="bg-white dark:bg-gray-900 min-h-screen">
             <ToastContainer draggablePercent={60}/>
             <div className="min-h-screen w-full flex items-center justify-center">
                 <button
                     onClick={signInWithGoogle}
-                    className="flex items-center gap-2 bg-white text-gray-700 px-6 py-3 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm"
+                    className="flex items-center gap-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 px-6 py-3 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
                 >
                 <img src="/google-icon-logo-svgrepo-com.svg" alt="Google" className="w-5 h-5" />
                     Continue with Google
@@ -109,7 +109,7 @@ const App = () => {
     }
 
     return (
-        <div>
+        <div className="bg-white dark:bg-gray-900 min-h-screen">
             <ToastContainer draggablePercent={60}/>
             <div className="min-h-screen w-full flex items-center justify-center">
                 <FileUploader/>

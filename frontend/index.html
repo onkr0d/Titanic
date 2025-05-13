@@ -6,8 +6,17 @@
     <link rel="icon" type="image/svg+xml" href="/noun-iceberg-2452017.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Titanic Uploader</title>
+    <script>
+      // Check for dark mode preference before the page loads
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.documentElement.classList.add('dark');
+        document.documentElement.style.backgroundColor = '#111827'; // dark:bg-gray-900
+      } else {
+        document.documentElement.style.backgroundColor = '#ffffff'; // bg-white
+      }
+    </script>
   </head>
-  <body>
+  <body class="bg-white dark:bg-gray-900">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -1,13 +1,15 @@
 import React, { useState, useRef } from 'react';
-import { UploadCloud, X, FileText, CheckCircle } from 'lucide-react';
+import { UploadCloud, X, FileText, CheckCircle, Sparkles } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { uploadVideo } from '../utils/api';
+import Tooltip from './Tooltip';
 
 interface FileState {
     file: File;
     id: string;
     status: 'ready' | 'uploading' | 'uploaded' | 'error';
     error?: string;
+    shouldCompress: boolean;
 }
 
 const FileUploader = () => {
@@ -55,13 +57,20 @@ const FileUploader = () => {
         setFiles(prev => [...prev, ...validFiles.map(file => ({
             file,
             id: Math.random().toString(36).substring(2, 11),
-            status: 'ready' as const
+            status: 'ready' as const,
+            shouldCompress: true // Default to true for compression
         }))]);
     };
 
     const removeFile = (fileId: string) => {
         setFiles(prev => prev.filter(f => f.id !== fileId));
     }
+
+    const toggleCompression = (fileId: string) => {
+        setFiles(prev => prev.map(f => 
+            f.id === fileId ? { ...f, shouldCompress: !f.shouldCompress } : f
+        ));
+    };
 
     const uploadFiles = async () => {
         const readyFiles = files.filter(f => f.status === 'ready');
@@ -74,8 +83,8 @@ const FileUploader = () => {
 
         try {
             // Upload all files in parallel
-            const uploadPromises = readyFiles.map(async ({ file, id }) => {
-                const result = await uploadVideo(file);
+            const uploadPromises = readyFiles.map(async ({ file, id, shouldCompress }) => {
+                const result = await uploadVideo(file, shouldCompress);
 
                 if (result.success) {
                     // Update file status to uploaded
@@ -142,7 +151,7 @@ const FileUploader = () => {
             {files.length > 0 && (
                 <div className="mt-6">
                     <div className="space-y-3">
-                        {files.map(({ file, id, status, error }) => (
+                        {files.map(({ file, id, status, error, shouldCompress }) => (
                             <div
                                 key={id}
                                 className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
@@ -161,26 +170,36 @@ const FileUploader = () => {
                                         <CheckCircle className="w-5 h-5 text-green-500" />
                                     ) : status === 'uploading' ? (
                                         <div className="w-5 h-5 border-2 border-t-blue-500 rounded-full animate-spin" />
-                                    ) : status === 'error' ? (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                removeFile(id);
-                                            }}
-                                            className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
-                                        >
-                                            <X className="w-4 h-4 text-red-500" />
-                                        </button>
                                     ) : (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                removeFile(id);
-                                            }}
-                                            className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
-                                        >
-                                            <X className="w-4 h-4 text-gray-500" />
-                                        </button>
+                                        <>
+                                            <Tooltip content={shouldCompress 
+                                                ? "Compression enabled - click to disable video compression" 
+                                                : "Compression disabled - click to enable video compression"
+                                            }>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        toggleCompression(id);
+                                                    }}
+                                                    className={`p-1.5 rounded transition-colors ${
+                                                        shouldCompress 
+                                                            ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400' 
+                                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                                                    }`}
+                                                >
+                                                    <Sparkles className="w-4 h-4" />
+                                                </button>
+                                            </Tooltip>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    removeFile(id);
+                                                }}
+                                                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                                            >
+                                                <X className="w-4 h-4 text-gray-500" />
+                                            </button>
+                                        </>
                                     )}
                                 </div>
                             </div>

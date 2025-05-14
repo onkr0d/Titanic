@@ -3,6 +3,7 @@ import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "firebas
 import { getAuth, connectAuthEmulator } from "firebase/auth";
 import FileUploader from "./components/FileUploader";
 import BackendStatus from "./components/BackendStatus";
+import DiskSpaceIndicator from "./components/DiskSpaceIndicator";
 
 // Import the functions you need from the SDKs you need
 import { useState } from "react";
@@ -116,6 +117,7 @@ const App = () => {
                 <FileUploader />
             </div>
             <BackendStatus />
+            <DiskSpaceIndicator />
         </div>
     );
 };

@@ -23,19 +23,32 @@ def compress_video(input_file: str) -> str:
     os.remove(input_file)
     return output_file
 
-def upload_video_to_umbrel():
+def upload_video_to_umbrel(input_file=None):
     job = rq.get_current_job()
-    compressed_file = job.dependency.return_value(True)  # Get the result from the ffmpeg job
+    
+    # Try to get file from dependency job first, otherwise use the input parameter
+    if job.dependency:
+        compressed_file = job.dependency.return_value(True)  # Get the result from the ffmpeg job
+        logger.debug(f"Got file from dependency job: {compressed_file}")
+    elif input_file:
+        compressed_file = input_file
+        logger.debug(f"Using input file directly: {compressed_file}")
+    else:
+        logger.error("No file provided - neither from dependency nor input parameter")
+        raise ValueError("No file provided for upload")
+    
     logger.debug(f"Starting upload to Umbrel for file: {compressed_file}")
     
     if not os.path.exists(compressed_file):
-        logger.error(f"Compressed file not found: {compressed_file}")
-        raise FileNotFoundError(f"Compressed file not found: {compressed_file}")
+        logger.error(f"File not found: {compressed_file}")
+        raise FileNotFoundError(f"File not found: {compressed_file}")
     
     # Create a marker file to indicate upload status
     upload_dir = os.path.dirname(compressed_file)
     marker_file = os.path.join(upload_dir, f"uploaded_{os.path.basename(compressed_file)}")
     
+    # FIXME: the below is poo-poo
+
     try:
         # Simulate upload process
         logger.debug(f"Uploading video to Umbrel: {compressed_file}")
@@ -49,5 +62,10 @@ def upload_video_to_umbrel():
     except Exception as e:
         logger.error(f"Error uploading to Umbrel: {str(e)}")
         raise
-    # remove compressed file
-    os.remove(compressed_file)
+    
+    # Only remove the file if it came from compression (to avoid deleting original files)
+    if job.dependency:
+        os.remove(compressed_file)
+        logger.debug(f"Removed compressed file: {compressed_file}")
+    else:
+        logger.debug(f"Keeping original file: {compressed_file}")

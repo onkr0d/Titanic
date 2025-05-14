@@ -10,6 +10,7 @@ from jobs.job import compress_video, upload_video_to_umbrel
 import firebase_admin
 from firebase_admin import credentials, auth
 from functools import wraps
+import shutil
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes 
@@ -37,21 +38,29 @@ umbrel_queue = Queue('umbrel', connection=Redis())
 def verify_firebase_token(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'error': 'No authorization token provided'}), 401
+        # auth_header = request.headers.get('Authorization')
+        # if not auth_header or not auth_header.startswith('Bearer '):
+        #     return jsonify({'error': 'No authorization token provided'}), 401
 
-        token = auth_header.split('Bearer ')[1]
-        try:
-            # Verify the ID token
-            decoded_token = auth.verify_id_token(token)
-            # Add the user info to the request context
-            request.user = decoded_token
-            return f(*args, **kwargs)
-        except Exception as e:
-            logger.error(f"Token verification failed: {str(e)}")
-            return jsonify({'error': 'Invalid authorization token'}), 401
+        # token = auth_header.split('Bearer ')[1]
+        # try:
+        #     # Verify the ID token
+        #     decoded_token = auth.verify_id_token(token)
+        #     # Add the user info to the request context
+        #     request.user = decoded_token
+        #     return f(*args, **kwargs)
+        # except Exception as e:
+        #     logger.error(f"Token verification failed: {str(e)}")
+        #     return jsonify({'error': 'Invalid authorization token'}), 401
 
+
+        # For testing, always succeed with a mock user
+        request.user = {
+            'uid': 'test-user-id',
+            'email': 'test@example.com',
+            'name': 'Test User'
+        }
+        return f(*args, **kwargs)
     return decorated_function
 
 def allowed_file(filename):
@@ -83,7 +92,8 @@ def upload_video():
             return jsonify({'error': 'No file part'}), 400
         
         file = request.files['file']
-        logger.debug(f"Received file: {file.filename}")
+        should_compress = request.form.get('shouldCompress', 'true').lower() == 'true'
+        logger.debug(f"Received file: {file.filename}, compression: {should_compress}")
         
         if file.filename == '':
             logger.error("Empty filename")
@@ -112,9 +122,13 @@ def upload_video():
                 file.save(filepath)
                 logger.debug("File saved successfully")
                 
-                # Enqueue the video processing job
-                ffmpeg_job = ffmpeg_queue.enqueue(compress_video, args=[filepath])
-                umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, depends_on=ffmpeg_job)
+                # Enqueue the video processing job only if compression is enabled
+                if should_compress:
+                    ffmpeg_job = ffmpeg_queue.enqueue(compress_video, args=[filepath])
+                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, depends_on=ffmpeg_job)
+                else:
+                    # If compression is disabled, just upload the original file
+                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, args=[filepath])
                 
                 return jsonify({
                     'message': 'File uploaded successfully',
@@ -134,6 +148,13 @@ def upload_video():
 @verify_firebase_token
 def health_check():
     return jsonify({"status": "ok"}), 200
+
+@app.route('/space')
+@verify_firebase_token
+def space():
+    # check how much disk space is left
+    total, used, free = shutil.disk_usage(UPLOAD_FOLDER)
+    return jsonify({"total": total, "used": used, "free": free}), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -7,6 +7,19 @@ export interface UploadResponse {
     error?: string;
 }
 
+export interface HealthCheckResponse {
+    status: string;
+}
+
+export const checkBackendHealth = async (): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/health`);
+        return response.ok;
+    } catch (error) {
+        return false;
+    }
+};
+
 export const uploadVideo = async (file: File): Promise<UploadResponse> => {
     const formData = new FormData();
     formData.append('file', file);
@@ -41,4 +54,4 @@ export const uploadVideo = async (file: File): Promise<UploadResponse> => {
             error: error instanceof Error ? error.message : 'Upload failed'
         };
     }
-}; 
+};

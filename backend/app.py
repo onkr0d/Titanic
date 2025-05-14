@@ -130,5 +130,10 @@ def upload_video():
         logger.error(f"Unexpected error: {str(e)}")
         return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
 
+@app.route('/api/health')
+@verify_firebase_token
+def health_check():
+    return jsonify({"status": "ok"}), 200
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

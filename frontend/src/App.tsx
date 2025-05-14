@@ -1,7 +1,8 @@
 import { User } from "firebase/auth";
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { getAuth, connectAuthEmulator} from "firebase/auth";
+import { getAuth, connectAuthEmulator } from "firebase/auth";
 import FileUploader from "./components/FileUploader";
+import BackendStatus from "./components/BackendStatus";
 
 // Import the functions you need from the SDKs you need
 import { useState } from "react";
@@ -13,12 +14,12 @@ import { Slide, toast, ToastContainer } from "react-toastify";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "how'd that get here",
-  authDomain: "oops",
-  projectId: "probably not critical",
-  storageBucket: "probably not critical.firebasestorage.app",
-  messagingSenderId: "yikes",
-  appId: "1:yikes:web:419dffceedf0eaaddb4fd8"
+    apiKey: "how'd that get here",
+    authDomain: "oops",
+    projectId: "probably not critical",
+    storageBucket: "probably not critical.firebasestorage.app",
+    messagingSenderId: "yikes",
+    appId: "1:yikes:web:419dffceedf0eaaddb4fd8"
 };
 
 // Initialize Firebase
@@ -60,7 +61,7 @@ const App = () => {
             });
         } catch (error: any) {
             let errorMessage = "Error signing in with Google";
-            
+
             // Check if it's a Firebase Function error
             if (error.code === 'auth/internal-error' && error.message.includes('HTTP error 403')) {
                 try {
@@ -89,31 +90,32 @@ const App = () => {
         }
     };
 
-// getAuth().signOut();
+    // getAuth().signOut();
 
     if (!user) {
         return (
             <div className="bg-white dark:bg-gray-900 min-h-screen">
-            <ToastContainer draggablePercent={60}/>
-            <div className="min-h-screen w-full flex items-center justify-center">
-                <button
-                    onClick={signInWithGoogle}
-                    className="flex items-center gap-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 px-6 py-3 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
-                >
-                <img src="/google-icon-logo-svgrepo-com.svg" alt="Google" className="w-5 h-5" />
-                    Continue with Google
-                </button>
-            </div>
+                <ToastContainer draggablePercent={60} />
+                <div className="min-h-screen w-full flex items-center justify-center">
+                    <button
+                        onClick={signInWithGoogle}
+                        className="flex items-center gap-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 px-6 py-3 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
+                    >
+                        <img src="/google-icon-logo-svgrepo-com.svg" alt="Google" className="w-5 h-5" />
+                        Continue with Google
+                    </button>
+                </div>
             </div>
         );
     }
 
     return (
         <div className="bg-white dark:bg-gray-900 min-h-screen">
-            <ToastContainer draggablePercent={60}/>
+            <ToastContainer draggablePercent={60} />
             <div className="min-h-screen w-full flex items-center justify-center">
-                <FileUploader/>
+                <FileUploader />
             </div>
+            <BackendStatus />
         </div>
     );
 };

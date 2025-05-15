@@ -1,32 +1,51 @@
-# Use the official Python image as a base
-FROM python:alpine
+# Builder Stage 
+FROM python:alpine AS builder
 
-# Set the working directory inside the container
+# Set working dir for building
 WORKDIR /app
 
-# Install system dependencies including Redis
+# Install only build-time dependencies
 RUN apk add --no-cache \
-    redis \
-    ffmpeg
+    build-base \
+    libffi-dev \
+    openssl-dev \
+    python3-dev
 
-# Copy only requirements.txt first for caching dependencies
+# Copy and install Python packages into /install
 COPY requirements.txt .
+RUN pip install --prefix=/install --no-cache-dir -r requirements.txt
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the Firebase credentials file first and set permissions
-COPY admin-sdk-cred.json .
-RUN chmod 600 admin-sdk-cred.json
-
-# Copy the rest of the application code into the container
+# Copy application source
 COPY . .
 
-# Make the startup script executable
+
+# Runtime Stage 
+FROM python:alpine
+WORKDIR /app
+
+# Install only runtime dependencies
+RUN apk add --no-cache \
+    ffmpeg \
+    redis
+
+# Copy installed Python packages from builder
+COPY --from=builder /install /usr/local
+
+# Copy Firebase credentials
+COPY --from=builder /app/admin-sdk-cred.json ./admin-sdk-cred.json
+RUN chmod 600 admin-sdk-cred.json
+
+# Copy application code
+COPY --from=builder /app .
+
+# Ensure startup script is executable
 RUN chmod +x start.sh
 
-# Expose ports for Flask and Redis
+# Add pip-installed binaries to PATH
+ENV PATH=/usr/local/bin:$PATH
+
+# Expose ports
 EXPOSE 5000 6379
 
-# Run the startup script
+# Launch entrypoint
 CMD ["./start.sh"]

@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Initialize Firebase Admin
-cred_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'admin-sdk-cred.json')
+cred_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'admin-sdk-cred.json'))
 cred = credentials.Certificate(cred_path)
 firebase_admin.initialize_app(cred)
 
@@ -38,32 +38,33 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 ffmpeg_queue = Queue('ffmpeg', connection=Redis())
 umbrel_queue = Queue('umbrel', connection=Redis())
 
+# TODO: set Firebase hosting IP to be static, so I can whitelist it in the backend??? 🤔
 def verify_firebase_token(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # auth_header = request.headers.get('Authorization')
-        # if not auth_header or not auth_header.startswith('Bearer '):
-        #     return jsonify({'error': 'No authorization token provided'}), 401
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'No authorization token provided'}), 401
 
-        # token = auth_header.split('Bearer ')[1]
-        # try:
-        #     # Verify the ID token
-        #     decoded_token = auth.verify_id_token(token)
-        #     # Add the user info to the request context
-        #     request.user = decoded_token
-        #     return f(*args, **kwargs)
-        # except Exception as e:
-        #     logger.error(f"Token verification failed: {str(e)}")
-        #     return jsonify({'error': 'Invalid authorization token'}), 401
+        token = auth_header.split('Bearer ')[1]
+        try:
+            # Verify the ID token
+            decoded_token = auth.verify_id_token(token)
+            # Add the user info to the request context
+            request.user = decoded_token
+            return f(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Token verification failed: {str(e)}")
+            return jsonify({'error': 'Invalid authorization token'}), 401
 
 
         # For testing, always succeed with a mock user
-        request.user = {
-            'uid': 'test-user-id',
-            'email': 'test@example.com',
-            'name': 'Test User'
-        }
-        return f(*args, **kwargs)
+    #     request.user = {
+    #         'uid': 'test-user-id',
+    #         'email': 'test@example.com',
+    #         'name': 'Test User'
+    #     }
+    #     return f(*args, **kwargs)
     return decorated_function
 
 def allowed_file(filename):
@@ -158,6 +159,13 @@ def space():
     # check how much disk space is left
     total, used, free = shutil.disk_usage(UPLOAD_FOLDER)
     return jsonify({"total": total, "used": used, "free": free}), 200
+
+@app.route('/health')
+def docker_health_check():
+    """Unauthenticated health check endpoint for Docker"""
+    return jsonify({"status": "healthy"}), 200
+
+# FIXME: why are some of them using /api/ and others are not ?!
 
 if __name__ == "__main__":
     # app.run(host="0.0.0.0", port=5000, debug=True)

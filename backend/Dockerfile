@@ -15,8 +15,11 @@ RUN apk add --no-cache \
 COPY requirements.txt .
 RUN pip install --prefix=/install --no-cache-dir -r requirements.txt
 
-# Copy application source
-COPY . .
+# Copy only the application source files needed
+COPY app.py .
+COPY hypercorn.toml .
+COPY start.sh .
+COPY jobs/ jobs/
 
 
 # Runtime Stage 
@@ -26,17 +29,20 @@ WORKDIR /app
 # Install only runtime dependencies
 RUN apk add --no-cache \
     ffmpeg \
-    redis
+    redis \
+    curl
 
 # Copy installed Python packages from builder
 COPY --from=builder /install /usr/local
 
-# Copy Firebase credentials
-COPY --from=builder /app/admin-sdk-cred.json ./admin-sdk-cred.json
-RUN chmod 600 admin-sdk-cred.json
-
 # Copy application code
-COPY --from=builder /app .
+COPY --from=builder /app/app.py .
+COPY --from=builder /app/hypercorn.toml .
+COPY --from=builder /app/start.sh .
+COPY --from=builder /app/jobs/ jobs/
+
+# Create uploads directory
+RUN mkdir -p uploads
 
 # Ensure startup script is executable
 RUN chmod +x start.sh
@@ -46,6 +52,10 @@ ENV PATH=/usr/local/bin:$PATH
 
 # Expose ports
 EXPOSE 5000 6379
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
 
 # Launch entrypoint
 CMD ["./start.sh"]

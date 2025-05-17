@@ -1,6 +1,6 @@
 import { getAuth } from 'firebase/auth';
 
-const API_BASE_URL = 'http://localhost:1302';
+const API_BASE_URL = 'https://compress.ivan.boston';
 
 export interface UploadResponse {
     success: boolean;
@@ -17,9 +17,25 @@ export interface DiskSpaceInfo {
     free: number;
 }
 
+// chat what's the overhead of sending 2 get requests at the same time on the same timer
+// what if we combine them into one 🤑🤑🤑
+// they pay me the big bucks for these kinds of opimizations 🔥
+
 export const checkBackendHealth = async (): Promise<boolean> => {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/health`);
+        const auth = getAuth();
+        const user = auth.currentUser;
+
+        if (!user) {
+            throw new Error('User not authenticated');
+        }
+
+        const idToken = await user.getIdToken();
+        const response = await fetch(`${API_BASE_URL}/api/health`, {
+            headers: {
+                'Authorization': `Bearer ${idToken}`
+            }
+        });
         return response.ok;
     } catch (error) {
         return false;

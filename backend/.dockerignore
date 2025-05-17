@@ -1,0 +1,21 @@
+# Development
+__pycache__
+*.pyc
+.pytest_cache
+.coverage
+.env
+venv/
+
+# Docker and deployment
+caddy/
+docker-compose.yml
+.dockerignore
+
+# Local data
+uploads/*
+!uploads/.gitkeep
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/ 

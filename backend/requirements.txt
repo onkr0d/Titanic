@@ -11,7 +11,7 @@ cryptography==44.0.3
 ffmpeg-python==0.2.0
 firebase-admin==6.8.0 # https://github.com/firebase/firebase-admin-python/issues/803 wtf
 Flask==3.1.1
-flask-cors==5.0.1
+flask-cors==6.0.0
 future==1.0.0
 google-api-core==2.25.0rc1
 google-api-python-client==2.169.0

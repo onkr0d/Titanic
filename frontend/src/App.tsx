@@ -46,8 +46,7 @@ const App = () => {
         const auth = getAuth();
         const provider = new GoogleAuthProvider();
         try {
-            const result = await signInWithPopup(auth, provider);
-            console.log("User email:", result.user.email);
+            await signInWithPopup(auth, provider);
             toast.success("Signed in with Google", {
                 position: "top-right",
                 autoClose: 5000,

@@ -34,8 +34,8 @@ const DiskSpaceIndicator = () => {
         };
 
         fetchDiskSpace();
-        // Refresh every minute
-        const interval = setInterval(fetchDiskSpace, 60000);
+        // Refresh every 30 seconds
+        const interval = setInterval(fetchDiskSpace, 30000);
 
         return () => clearInterval(interval);
     }, []);

@@ -73,7 +73,7 @@ const DiskSpaceIndicator = () => {
             <HardDrive className="w-4 h-4 text-gray-600 dark:text-gray-300" />
             <div className="flex flex-col w-full">
                 <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Disk Space</span>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Disk space</span>
                     <span className="text-xs text-gray-500 dark:text-gray-400">{formatBytes(diskSpace.used)} / {formatBytes(diskSpace.total)}</span>
                 </div>
                 <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">

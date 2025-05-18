@@ -19,7 +19,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-      attestations: write
       id-token: write
     steps:
       - name: Checkout repository
@@ -46,7 +45,6 @@ jobs:
         with:
           context: ./backend
           push: true
-          # generate an artifact attestation
           tags: ${{ steps.flask-meta.outputs.tags }}
           labels: ${{ steps.flask-meta.outputs.labels }}
       
@@ -65,19 +63,4 @@ jobs:
           push: true
           tags: ${{ steps.caddy-meta.outputs.tags }}
           labels: ${{ steps.caddy-meta.outputs.labels }}
-      
-      # Generate attestations for both images
-      - name: Generate Flask attestation
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.flask-push.outputs.digest }}
-          push-to-registry: true
-
-      - name: Generate Caddy attestation
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/caddy
-          subject-digest: ${{ steps.caddy-push.outputs.digest }}
-          push-to-registry: true
       

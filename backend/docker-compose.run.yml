@@ -1,14 +1,11 @@
 services:
   flask:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/onkr0d/titanic:latest
     expose:
       - "5000"
     volumes:
       - ./uploads:/app/uploads
     environment:
-      - PYTHONUNBUFFERED=1
       - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/admin-sdk-cred
     secrets:
       - admin-sdk-cred
@@ -19,11 +16,11 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   caddy:
-    build:
-      context: ./caddy
-      dockerfile: Dockerfile
+    image: ghcr.io/onkr0d/titanic/caddy:latest
     ports:
       - "80:80"
       - "443:443"
@@ -40,6 +37,20 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=60
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_LABEL_ENABLE=true
+    networks:
+      - app_network
+    restart: unless-stopped
 
 networks:
   app_network:

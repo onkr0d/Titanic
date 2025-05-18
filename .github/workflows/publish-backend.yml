@@ -20,48 +20,47 @@ jobs:
     permissions:
       contents: read
       packages: write
-      id-token: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
       # Uses the `docker/login-action` action to log in to the Container registry registry using the account and password that will publish the packages. Once published, the packages are scoped to the account defined here.
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        uses: docker/login-action@v3.4.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       # This step uses [docker/metadata-action](https://github.com/docker/metadata-action#about) to extract tags and labels that will be applied to the specified image. The `id` "meta" allows the output of this step to be referenced in a subsequent step. The `images` value provides the base name for the tags and labels.
+      # lowkey all metadata extraction is used for attestation, but attest isn't supported in private user owned repo. could be something to come back to later
       - name: Extract metadata for Flask
         id: flask-meta
-        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        uses: docker/metadata-action@v5.7.0
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-      # This step uses the `docker/build-push-action` action to build the image, based on your repository's `Dockerfile`. If the build succeeds, it pushes the image to GitHub Packages.
-      # It uses the `context` parameter to define the build's context as the set of files located in the specified path. For more information, see [Usage](https://github.com/docker/build-push-action#usage) in the README of the `docker/build-push-action` repository.
-      # It uses the `tags` and `labels` parameters to tag and label the image with the output from the "meta" step.
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend
+
       - name: Build and push Flask image
-        id: flask-push
-        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        uses: docker/build-push-action@v6.17.0
         with:
           context: ./backend
           push: true
-          tags: ${{ steps.flask-meta.outputs.tags }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
+            ${{ steps.flask-meta.outputs.tags }}
           labels: ${{ steps.flask-meta.outputs.labels }}
-      
-      # Build and push Caddy image
+
       - name: Extract metadata for Caddy
         id: caddy-meta
-        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        uses: docker/metadata-action@v5.7.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/caddy
 
-      - name: Build and push Caddy image
-        id: caddy-push
-        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+      - name: Build & push Caddy image
+        uses: docker/build-push-action@v6.17.0
         with:
           context: ./backend/caddy
           push: true
-          tags: ${{ steps.caddy-meta.outputs.tags }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/caddy:latest
+            ${{ steps.caddy-meta.outputs.tags }}
           labels: ${{ steps.caddy-meta.outputs.labels }}
-      

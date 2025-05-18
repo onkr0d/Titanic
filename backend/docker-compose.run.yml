@@ -1,6 +1,6 @@
 services:
   flask:
-    image: ghcr.io/onkr0d/titanic:latest
+    image: ghcr.io/onkr0d/titanic/backend:latest
     expose:
       - "5000"
     volumes:

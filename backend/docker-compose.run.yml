@@ -48,6 +48,8 @@ services:
       - WATCHTOWER_POLL_INTERVAL=60
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_LABEL_ENABLE=true
+      - DOCKER_USERNAME=${GITHUB_USERNAME}
+      - DOCKER_PASSWORD=${GITHUB_PAT}
     networks:
       - app_network
     restart: unless-stopped

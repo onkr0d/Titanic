@@ -8,16 +8,6 @@ http://compress.ivan.boston {
 	redir https://compress.ivan.boston
 }
 
-# Health check endpoint
-:80 {
-	@health {
-		path /health
-	}
-	handle @health {
-		respond 200
-	}
-}
-
 # for dev
 localhost:443 {
 	tls internal
@@ -33,6 +23,14 @@ compress.ivan.boston {
 		output stdout
 		format console
 	}
+
+	@health {
+		path /health
+    }
+	
+    handle @health {
+        respond 200
+    }
 
 	# Reverse proxy to flask service
 	reverse_proxy flask:5000 {

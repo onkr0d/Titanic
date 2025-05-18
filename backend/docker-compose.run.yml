@@ -44,12 +44,11 @@ services:
     image: containrrr/watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - $HOME/.docker/config.json:/config.json:ro
     environment:
       - WATCHTOWER_POLL_INTERVAL=60
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_LABEL_ENABLE=true
-      - DOCKER_USERNAME=${GITHUB_USERNAME}
-      - DOCKER_PASSWORD=${GITHUB_PAT}
     networks:
       - app_network
     restart: unless-stopped

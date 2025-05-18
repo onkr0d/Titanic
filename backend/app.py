@@ -16,8 +16,7 @@ from functools import wraps
 import shutil
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes 
-# FIXME: don't do that ^
+CORS(app, origins=["https://titanic.ivan.boston"])  # Only allow requests from frontend domain
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 

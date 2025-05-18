@@ -83,7 +83,6 @@ export const uploadVideo = async (file: File, shouldCompress: boolean = true): P
         }
 
         const idToken = await user.getIdToken();
-        console.log('idToken', idToken);
         const response = await fetch(`${API_BASE_URL}/upload`, {
             method: 'POST',
             headers: {

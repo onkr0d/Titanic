@@ -16,7 +16,11 @@ from functools import wraps
 import shutil
 
 app = Flask(__name__)
-CORS(app, origins=["https://titanic.ivan.boston"])  # Only allow requests from frontend domain
+CORS(app,
+     origins=["https://titanic.ivan.boston"],
+     allow_headers=["Content-Type","Authorization"],
+     automatic_options=True)
+
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 

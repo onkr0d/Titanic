@@ -44,7 +44,7 @@ pyasn1_modules==0.4.2
 pycparser==2.22
 PyJWT==2.10.1
 pylsqpack==0.3.22
-pyOpenSSL==25.0.0
+pyOpenSSL==25.1.0
 pyparsing==3.2.3
 redis==6.1.0
 requests==2.32.3

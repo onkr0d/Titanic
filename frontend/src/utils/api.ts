@@ -1,4 +1,5 @@
 import { getAuth } from 'firebase/auth';
+import axios from 'axios';
 
 const API_BASE_URL = 'https://compress.ivan.boston';
 
@@ -15,6 +16,12 @@ export interface DiskSpaceInfo {
     total: number;
     used: number;
     free: number;
+}
+
+export interface UploadProgress {
+    progress: number;
+    loaded: number;
+    total: number;
 }
 
 // chat what's the overhead of sending 2 get requests at the same time on the same timer
@@ -69,7 +76,11 @@ export const getDiskSpace = async (): Promise<DiskSpaceInfo | null> => {
     }
 };
 
-export const uploadVideo = async (file: File, shouldCompress: boolean = true): Promise<UploadResponse> => {
+export const uploadVideo = async (
+    file: File, 
+    shouldCompress: boolean = true,
+    onProgress?: (progress: UploadProgress) => void
+): Promise<UploadResponse> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('shouldCompress', shouldCompress.toString());
@@ -83,18 +94,20 @@ export const uploadVideo = async (file: File, shouldCompress: boolean = true): P
         }
 
         const idToken = await user.getIdToken();
-        const response = await fetch(`${API_BASE_URL}/upload`, {
-            method: 'POST',
+        const response = await axios.post(`${API_BASE_URL}/upload`, formData, {
             headers: {
                 'Authorization': `Bearer ${idToken}`
             },
-            body: formData,
+            onUploadProgress: (progressEvent) => {
+                if (onProgress && progressEvent.total) {
+                    onProgress({
+                        progress: Math.round((progressEvent.loaded * 100) / progressEvent.total),
+                        loaded: progressEvent.loaded,
+                        total: progressEvent.total
+                    });
+                }
+            }
         });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Upload failed');
-        }
 
         return { success: true };
     } catch (error) {

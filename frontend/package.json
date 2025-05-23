@@ -18,13 +18,13 @@
     "axios": "^1.9.0",
     "firebase": "^11.7.1",
     "lucide-react": "^0.471.2",
-    "react": "^18.3.1",
+    "react": "^19.1.0",
     "react-dom": "^18.3.1",
     "react-toastify": "^11.0.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.26.0",
-    "@types/react": "^18.3.21",
+    "@types/react": "^19.1.5",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.4.1",
     "autoprefixer": "^10.4.21",

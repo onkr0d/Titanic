@@ -9,7 +9,8 @@ import DiskSpaceIndicator from "./components/DiskSpaceIndicator";
 import { useState } from "react";
 import { initializeApp } from "firebase/app";
 import { useEffect } from "react";
-import { Slide, toast, ToastContainer } from "react-toastify";
+import { Slide, ToastContainer } from "react-toastify";
+import { showToast } from "./utils/toast";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -47,16 +48,7 @@ const App = () => {
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
-            toast.success("Signed in with Google", {
-                position: "top-right",
-                autoClose: 5000,
-                hideProgressBar: false,
-                closeOnClick: true,
-                pauseOnFocusLoss: false,
-                pauseOnHover: false,
-                draggable: true,
-                progress: undefined,
-                theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+            showToast.success("Signed in with Google", {
                 transition: Slide,
             });
         } catch (error: any) {
@@ -75,16 +67,7 @@ const App = () => {
                 }
             }
 
-            toast.error(errorMessage, {
-                position: "top-right",
-                autoClose: 5000,
-                hideProgressBar: false,
-                closeOnClick: true,
-                pauseOnFocusLoss: false,
-                pauseOnHover: false,
-                draggable: true,
-                progress: undefined,
-                theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+            showToast.error(errorMessage, {
                 transition: Slide,
             });
         }

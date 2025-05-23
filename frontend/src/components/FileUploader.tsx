@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { UploadCloud, X, FileText, CheckCircle, Sparkles } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { showToast } from '../utils/toast';
 import { uploadVideo } from '../utils/api';
 import Tooltip from './Tooltip';
 
@@ -53,7 +53,7 @@ const FileUploader = () => {
     const handleFiles = (newFiles: File[]) => {
         const validFiles = newFiles.filter(isValidVideoFile);
         if (validFiles.length !== newFiles.length) {
-            toast.error('Some files were skipped because they are not valid video files');
+            showToast.error('Some files were skipped because they are not valid video files');
         }
         setFiles(prev => [...prev, ...validFiles.map(file => ({
             file,
@@ -97,7 +97,7 @@ const FileUploader = () => {
                     setFiles(prev => prev.map(f =>
                         f.id === id ? { ...f, status: 'uploaded', progress: 100 } : f
                     ));
-                    toast.success(`Successfully uploaded ${file.name}`, {
+                    showToast.success(`Successfully uploaded ${file.name}`, {
                         pauseOnFocusLoss: false,
                     });
                 } else {
@@ -109,14 +109,14 @@ const FileUploader = () => {
                             error: result.error
                         } : f
                     ));
-                    toast.error(`Failed to upload ${file.name}: ${result.error}`);
+                    showToast.error(`Failed to upload ${file.name}: ${result.error}`);
                 }
             });
 
             await Promise.all(uploadPromises);
         } catch (error) {
             console.error('Upload error:', error);
-            toast.error('An error occurred during upload');
+            showToast.error('An error occurred during upload');
         }
     };
 

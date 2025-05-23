@@ -10,6 +10,7 @@ interface FileState {
     status: 'ready' | 'uploading' | 'uploaded' | 'error';
     error?: string;
     shouldCompress: boolean;
+    progress?: number;
 }
 
 const FileUploader = () => {
@@ -58,7 +59,8 @@ const FileUploader = () => {
             file,
             id: Math.random().toString(36).substring(2, 11),
             status: 'ready' as const,
-            shouldCompress: true // Default to true for compression
+            shouldCompress: true, // Default to true for compression
+            progress: undefined
         }))]);
     };
 
@@ -78,18 +80,22 @@ const FileUploader = () => {
 
         // Update status to uploading for all ready files
         setFiles(prev => prev.map(f =>
-            f.status === 'ready' ? { ...f, status: 'uploading' } : f
+            f.status === 'ready' ? { ...f, status: 'uploading', progress: 0 } : f
         ));
 
         try {
             // Upload all files in parallel
             const uploadPromises = readyFiles.map(async ({ file, id, shouldCompress }) => {
-                const result = await uploadVideo(file, shouldCompress);
+                const result = await uploadVideo(file, shouldCompress, (progress) => {
+                    setFiles(prev => prev.map(f =>
+                        f.id === id ? { ...f, progress: progress.progress } : f
+                    ));
+                });
 
                 if (result.success) {
                     // Update file status to uploaded
                     setFiles(prev => prev.map(f =>
-                        f.id === id ? { ...f, status: 'uploaded' } : f
+                        f.id === id ? { ...f, status: 'uploaded', progress: 100 } : f
                     ));
                     toast.success(`Successfully uploaded ${file.name}`, {
                         pauseOnFocusLoss: false,
@@ -151,17 +157,25 @@ const FileUploader = () => {
             {files.length > 0 && (
                 <div className="mt-6">
                     <div className="space-y-3">
-                        {files.map(({ file, id, status, error, shouldCompress }) => (
+                        {files.map(({ file, id, status, error, shouldCompress, progress }) => (
                             <div
                                 key={id}
                                 className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
                             >
-                                <div className="flex items-center space-x-3">
+                                <div className="flex items-center space-x-3 flex-grow">
                                     <FileText className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-                                    <div className="flex flex-col">
+                                    <div className="flex flex-col flex-grow">
                                         <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{file.name}</span>
                                         {error && (
                                             <span className="text-xs text-red-500 dark:text-red-400">{error}</span>
+                                        )}
+                                        {status === 'uploading' && progress !== undefined && (
+                                            <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mt-1">
+                                                <div
+                                                    className="h-full bg-blue-500 transition-all duration-300"
+                                                    style={{ width: `${progress}%` }}
+                                                />
+                                            </div>
                                         )}
                                     </div>
                                 </div>

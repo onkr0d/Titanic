@@ -42,7 +42,7 @@ COPY --from=builder /app/start.sh .
 COPY --from=builder /app/jobs/ jobs/
 
 # Create uploads directory
-RUN mkdir -p uploads
+RUN mkdir -p videos/uncompressed videos/compressed
 
 # Ensure startup script is executable
 RUN chmod +x start.sh

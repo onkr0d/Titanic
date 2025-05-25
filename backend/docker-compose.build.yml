@@ -6,7 +6,7 @@ services:
     expose:
       - "5000"
     volumes:
-      - ./uploads:/app/uploads
+      - ./videos:/app/videos
     environment:
       - PYTHONUNBUFFERED=1
       - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/admin-sdk-cred

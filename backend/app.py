@@ -30,13 +30,18 @@ cred = credentials.Certificate(cred_path)
 firebase_admin.initialize_app(cred)
 
 # Configure upload settings
-UPLOAD_FOLDER = os.path.abspath('uploads')  # Convert to absolute path
+UPLOAD_FOLDER = os.path.abspath('videos')  # Base directory for videos
+UNCOMPRESSED_FOLDER = os.path.join(UPLOAD_FOLDER, 'uncompressed')
+COMPRESSED_FOLDER = os.path.join(UPLOAD_FOLDER, 'compressed')
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['UNCOMPRESSED_FOLDER'] = UNCOMPRESSED_FOLDER
+app.config['COMPRESSED_FOLDER'] = COMPRESSED_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB max file size, just for testing
 
-# Ensure upload directory exists
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Ensure upload directories exist
+os.makedirs(UNCOMPRESSED_FOLDER, exist_ok=True)
+os.makedirs(COMPRESSED_FOLDER, exist_ok=True)
 
 ffmpeg_queue = Queue('ffmpeg', connection=Redis())
 umbrel_queue = Queue('umbrel', connection=Redis())
@@ -109,7 +114,8 @@ def upload_video():
         if file and allowed_file(file.filename):
             # Secure the filename and create full path
             filename = secure_filename(file.filename)
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            target_dir = app.config['UNCOMPRESSED_FOLDER']
+            filepath = os.path.join(target_dir, filename)
             
             # Additional security check
             if not is_safe_path(filepath):
@@ -123,7 +129,7 @@ def upload_video():
                 base, ext = os.path.splitext(filename)
                 counter = 1
                 while os.path.exists(filepath):
-                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{base}_{counter}{ext}")
+                    filepath = os.path.join(target_dir, f"{base}_{counter}{ext}")
                     counter += 1
                 
                 file.save(filepath)

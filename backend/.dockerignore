@@ -12,8 +12,8 @@ docker-compose.yml
 .dockerignore
 
 # Local data
-uploads/*
-!uploads/.gitkeep
+videos/*
+!videos/.gitkeep
 
 # Editor and OS files
 .DS_Store

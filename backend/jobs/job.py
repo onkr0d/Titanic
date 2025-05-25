@@ -7,7 +7,11 @@ logger = logging.getLogger(__name__)
 
 # assume safe path already!
 def compress_video(input_file: str) -> str:
-    output_file = f'{input_file}_compressed.mp4'
+    # Get the base filename without the directory
+    filename = os.path.basename(input_file)
+    # Create output path in the compressed directory
+    output_file = os.path.join(os.path.dirname(os.path.dirname(input_file)), 'compressed', filename)
+    
     ffmpeg.input(input_file).output(
         output_file,
         vcodec='libx265',

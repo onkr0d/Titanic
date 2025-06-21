@@ -12,11 +12,13 @@ def compress_video(input_file: str) -> str:
     # Create output path in the compressed directory
     output_file = os.path.join(os.path.dirname(os.path.dirname(input_file)), 'compressed', filename)
     
+    # Equivalent ffmpeg CLI command:
+    # ffmpeg -i <input_file> -vcodec libx265 -crf 22 -preset medium -acodec copy -movflags +faststart -map_metadata 0 <output_file>
     ffmpeg.input(input_file).output(
         output_file,
         vcodec='libx265',
         crf=22,
-        preset='slow',
+        preset='medium',
         acodec='copy',
         movflags='+faststart', # optimize for streaming, since this is for plex
         map_metadata=0         # preserve original metadata

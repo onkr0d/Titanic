@@ -187,8 +187,8 @@ const FileUploader = () => {
                                     ) : (
                                         <>
                                             <Tooltip content={shouldCompress 
-                                                ? "Compression enabled - click to disable video compression" 
-                                                : "Compression disabled - click to enable video compression"
+                                                ? "Compression enabled - video will be compressed before it appears in Plex"
+                                                : "Compression disabled - video will appear in Plex as is"
                                             }>
                                                 <button
                                                     onClick={(e) => {

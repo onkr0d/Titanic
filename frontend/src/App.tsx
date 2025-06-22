@@ -98,8 +98,16 @@ const App = () => {
             <div className="min-h-screen w-full flex items-center justify-center">
                 <FileUploader />
             </div>
-            <BackendStatus />
-            <DiskSpaceIndicator />
+            <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 z-10">
+                <div className="md:hidden space-y-2">
+                    <BackendStatus />
+                    <DiskSpaceIndicator />
+                </div>
+                <div className="hidden md:block">
+                    <BackendStatus />
+                    <DiskSpaceIndicator />
+                </div>
+            </div>
         </div>
     );
 };

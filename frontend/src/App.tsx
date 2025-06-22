@@ -4,6 +4,7 @@ import { getAuth, connectAuthEmulator } from "firebase/auth";
 import FileUploader from "./components/FileUploader";
 import BackendStatus from "./components/BackendStatus";
 import DiskSpaceIndicator from "./components/DiskSpaceIndicator";
+import FfmpegVersion from "./components/FfmpegVersion";
 
 // Import the functions you need from the SDKs you need
 import { useState } from "react";
@@ -100,6 +101,7 @@ const App = () => {
             </div>
             <BackendStatus />
             <DiskSpaceIndicator />
+            <FfmpegVersion />
         </div>
     );
 };

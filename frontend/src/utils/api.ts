@@ -24,12 +24,6 @@ export interface UploadProgress {
     total: number;
 }
 
-export interface FfmpegVersionResponse {
-    success: boolean;
-    version?: string;
-    error?: string;
-}
-
 // chat what's the overhead of sending 2 get requests at the same time on the same timer
 // what if we combine them into one 🤑🤑🤑
 // they pay me the big bucks for these kinds of opimizations 🔥
@@ -78,33 +72,6 @@ export const getDiskSpace = async (): Promise<DiskSpaceInfo | null> => {
         return await response.json();
     } catch (error) {
         console.error('Error fetching disk space:', error);
-        return null;
-    }
-};
-
-export const getFfmpegVersion = async (): Promise<FfmpegVersionResponse | null> => {
-    try {
-        const auth = getAuth();
-        const user = auth.currentUser;
-
-        if (!user) {
-            throw new Error('User not authenticated');
-        }
-
-        const idToken = await user.getIdToken();
-        const response = await fetch(`${API_BASE_URL}/ffmpeg-version`, {
-            headers: {
-                'Authorization': `Bearer ${idToken}`
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to fetch ffmpeg version');
-        }
-
-        return await response.json();
-    } catch (error) {
-        console.error('Error fetching ffmpeg version:', error);
         return null;
     }
 };

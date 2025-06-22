@@ -14,6 +14,7 @@ import firebase_admin
 from firebase_admin import credentials, auth
 from functools import wraps
 import shutil
+import subprocess
 
 app = Flask(__name__)
 CORS(app,
@@ -173,6 +174,44 @@ def space():
 def docker_health_check():
     """Unauthenticated health check endpoint for Docker"""
     return jsonify({"status": "healthy"}), 200
+
+@app.route('/ffmpeg-version')
+@verify_firebase_token
+def ffmpeg_version():
+    """Get ffmpeg version information"""
+    try:
+        result = subprocess.run(['ffmpeg', '--version'], 
+                              capture_output=True, 
+                              text=True, 
+                              timeout=10)
+        
+        if result.returncode == 0:
+            return jsonify({
+                'success': True,
+                'version': result.stdout.strip()
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'ffmpeg command failed',
+                'stderr': result.stderr.strip()
+            }), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            'success': False,
+            'error': 'ffmpeg command timed out'
+        }), 500
+    except FileNotFoundError:
+        return jsonify({
+            'success': False,
+            'error': 'ffmpeg not found on system'
+        }), 500
+    except Exception as e:
+        logger.error(f"Error running ffmpeg --version: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'Unexpected error: {str(e)}'
+        }), 500
 
 # FIXME: why are some of them using /api/ and others are not ?!
 

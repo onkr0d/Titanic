@@ -4,7 +4,7 @@ import { getAuth, connectAuthEmulator } from "firebase/auth";
 import FileUploader from "./components/FileUploader";
 import BackendStatus from "./components/BackendStatus";
 import DiskSpaceIndicator from "./components/DiskSpaceIndicator";
-import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
 
 // Import the functions you need from the SDKs you need
 import { useState } from "react";
@@ -30,7 +30,7 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize App Check with proper debug mode handling
 const appCheck = initializeAppCheck(app, {
-    provider: new ReCaptchaV3Provider(import.meta.env.DEV ? import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY_DEV : import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY),
+    provider: new ReCaptchaEnterpriseProvider(import.meta.env.DEV ? import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY_DEV : import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY),
     isTokenAutoRefreshEnabled: true,
 });
 

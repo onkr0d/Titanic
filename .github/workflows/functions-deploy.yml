@@ -13,6 +13,11 @@ jobs:
         working-directory: frontend/functions
     steps:
       - uses: actions/checkout@v4
+      - uses: SpicyPizza/create-envfile@v2.0
+        with:
+          env_key_ALLOWED_EMAILS: ${{ secrets.ALLOWED_EMAILS }}
+          fail_on_empty: true
+          directory: frontend/functions
       - uses: oven-sh/setup-bun@v2
       - run: |
           bun install --frozen-lockfile

@@ -4,6 +4,7 @@ import { getAuth, connectAuthEmulator } from "firebase/auth";
 import FileUploader from "./components/FileUploader";
 import BackendStatus from "./components/BackendStatus";
 import DiskSpaceIndicator from "./components/DiskSpaceIndicator";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
 // Import the functions you need from the SDKs you need
 import { useState } from "react";
@@ -16,17 +17,27 @@ import { showToast } from "./utils/toast";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-    apiKey: "AIzaSyBjv6oD7C_D7U3H_y1SbAnoJSrK_MWDTjY",
-    authDomain: "titanic-uploader.firebaseapp.com",
-    projectId: "titanic-uploader",
-    storageBucket: "titanic-uploader.firebasestorage.app",
-    messagingSenderId: "642549593353",
-    appId: "1:642549593353:web:419dffceedf0eaaddb4fd8"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 // Initialize Firebase
-// const app = 
-initializeApp(firebaseConfig);
+const app = initializeApp(firebaseConfig);
+
+// Initialize App Check with proper debug mode handling
+const appCheck = initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(import.meta.env.DEV ? import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY_DEV : import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY),
+    isTokenAutoRefreshEnabled: true,
+});
+
+// Log App Check status for debugging
+if (import.meta.env.DEV) {
+    console.log('Firebase App Check initialized in development mode');
+}
 
 const App = () => {
     const [user, setUser] = useState<User | null>(null);
@@ -34,8 +45,7 @@ const App = () => {
     useEffect(() => {
         const auth = getAuth();
         // use emulator if in dev
-        const isDev = process.env.NODE_ENV === "development";
-        if (isDev) {
+        if (import.meta.env.DEV) {
             connectAuthEmulator(auth, "http://127.0.0.1:9099");
         }
         onAuthStateChanged(auth, (user) => {

@@ -1,7 +1,8 @@
 import { getAuth } from 'firebase/auth';
 import axios from 'axios';
 
-const API_BASE_URL = 'https://compress.ivan.boston';
+// if in dev, use the emulator
+const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:6969' : 'https://titanic.ivan.boston';
 
 export interface UploadResponse {
     success: boolean;

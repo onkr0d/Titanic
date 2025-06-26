@@ -20,6 +20,16 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+      - uses: SpicyPizza/create-envfile@v2.0
+        with:
+          envkey_VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          envkey_VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          envkey_VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          envkey_VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          envkey_VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          envkey_VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          envkey_VITE_FIREBASE_RECAPTCHA_SITE_KEY: ${{ secrets.VITE_FIREBASE_RECAPTCHA_SITE_KEY }}
+          directory: frontend
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - uses: FirebaseExtended/action-hosting-deploy@v0

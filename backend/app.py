@@ -10,30 +10,29 @@ import logging
 from flask_cors import CORS
 from jobs.job import compress_video, upload_video_to_umbrel
 import firebase_admin
-from firebase_admin import credentials, auth
+from firebase_admin import credentials, auth, app_check
 from functools import wraps
 import shutil
+import jwt
+import flask
 
 IS_DEV = os.environ.get('IS_DEV', 'false').lower() == 'true'
-
+logger = logging.getLogger(__name__)
 app = Flask(__name__)
 origins = ["https://titanic.ivan.boston"]
 
-print(f"IS_DEV: {IS_DEV}")
+logger.info(f"IS_DEV: {IS_DEV}")
 
 if IS_DEV:
-    origins.extend([
-        "http://localhost:5173",
-        "http://localhost:6969"
-    ])
+    origins.append("http://localhost:5173")
+    origins.append("http://localhost:6969")
 
 CORS(app,
      origins=origins,
-     allow_headers=["Content-Type","Authorization"],
+     allow_headers=["Content-Type","Authorization","X-Firebase-AppCheck"],
      automatic_options=True)
 
 logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
 
 # Initialize Firebase Admin
 cred_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'admin-sdk-cred.json'))
@@ -80,6 +79,16 @@ def verify_firebase_token(f):
             return jsonify({'error': 'Invalid authorization token'}), 401        
     return decorated_function
 
+@app.before_request
+def verify_app_check() -> None:
+    app_check_token = flask.request.headers.get("X-Firebase-AppCheck", default="")
+    try:
+        app_check.verify_token(app_check_token)
+        # If verify_token() succeeds, okay to continue to route handler.
+    except (ValueError, jwt.exceptions.DecodeError):
+        logger.error(f"App Check token verification failed: {app_check_token}")
+        flask.abort(401)
+    
 def allowed_file(filename):
     # Check for null bytes
     if '\0' in filename:

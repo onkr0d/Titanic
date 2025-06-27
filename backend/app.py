@@ -8,16 +8,27 @@ import os
 from werkzeug.utils import secure_filename
 import logging
 from flask_cors import CORS
-from pathlib import Path
 from jobs.job import compress_video, upload_video_to_umbrel
 import firebase_admin
 from firebase_admin import credentials, auth
 from functools import wraps
 import shutil
 
+IS_DEV = os.environ.get('IS_DEV', 'false').lower() == 'true'
+
 app = Flask(__name__)
+origins = ["https://titanic.ivan.boston"]
+
+print(f"IS_DEV: {IS_DEV}")
+
+if IS_DEV:
+    origins.extend([
+        "http://localhost:5173",
+        "http://localhost:6969"
+    ])
+
 CORS(app,
-     origins=["https://titanic.ivan.boston"],
+     origins=origins,
      allow_headers=["Content-Type","Authorization"],
      automatic_options=True)
 
@@ -50,6 +61,9 @@ umbrel_queue = Queue('umbrel', connection=Redis())
 def verify_firebase_token(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        if IS_DEV:
+            return f(*args, **kwargs)
+        
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'No authorization token provided'}), 401
@@ -63,16 +77,7 @@ def verify_firebase_token(f):
             return f(*args, **kwargs)
         except Exception as e:
             logger.error(f"Token verification failed: {str(e)}")
-            return jsonify({'error': 'Invalid authorization token'}), 401
-
-
-        # For testing, always succeed with a mock user
-    #     request.user = {
-    #         'uid': 'test-user-id',
-    #         'email': 'test@example.com',
-    #         'name': 'Test User'
-    #     }
-    #     return f(*args, **kwargs)
+            return jsonify({'error': 'Invalid authorization token'}), 401        
     return decorated_function
 
 def allowed_file(filename):

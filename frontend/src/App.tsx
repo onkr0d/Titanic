@@ -29,7 +29,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Initialize App Check with proper debug mode handling
-const appCheck = initializeAppCheck(app, {
+export const appCheck = initializeAppCheck(app, {
     provider: new ReCaptchaEnterpriseProvider(import.meta.env.DEV ? import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY_DEV : import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY),
     isTokenAutoRefreshEnabled: true,
 });
@@ -64,13 +64,15 @@ const App = () => {
         } catch (error: any) {
             let errorMessage = "Error signing in with Google";
 
-            // Check if it's a Firebase Function error
             if (error.code === 'auth/internal-error' && error.message.includes('HTTP error 403')) {
                 try {
-                    // Extract the error message from the function response
-                    const match = error.message.match(/{"error":{"message":"([^"]+)"/);
-                    if (match) {
-                        errorMessage += ": " + match[1];
+                    // Try to parse the error message as JSON
+                    const errorMatch = error.message.match(/HTTP Cloud Function returned an error: (.+)/);
+                    if (errorMatch) {
+                        const functionError = JSON.parse(errorMatch[1]);
+                        if (functionError.error && functionError.error.message) {
+                            errorMessage += ": " + functionError.error.message;
+                        }
                     }
                 } catch (e) {
                     console.error("Error parsing error message:", e);
@@ -82,8 +84,6 @@ const App = () => {
             });
         }
     };
-
-    // getAuth().signOut();
 
     if (!user) {
         return (

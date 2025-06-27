@@ -1,5 +1,7 @@
 import { getAuth } from 'firebase/auth';
 import axios from 'axios';
+import { getToken } from "firebase/app-check";
+import { appCheck } from '../App';
 
 // if in dev, use the emulator
 const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:6969' : 'https://compress.ivan.boston';
@@ -25,24 +27,27 @@ export interface UploadProgress {
     total: number;
 }
 
+async function authHeaders(): Promise<Record<string, string>> {
+    const user = getAuth().currentUser;
+    if (!user) throw new Error('User not authenticated');
+    const idToken = await user.getIdToken(/* forceRefresh */ false);
+    const { token: appCheckToken } = await getToken(appCheck);
+    return {
+      Authorization: `Bearer ${idToken}`,
+      'X-Firebase-AppCheck': appCheckToken,
+    };
+  }
+  
+
 // chat what's the overhead of sending 2 get requests at the same time on the same timer
 // what if we combine them into one 🤑🤑🤑
 // they pay me the big bucks for these kinds of opimizations 🔥
 
 export const checkBackendHealth = async (): Promise<boolean> => {
     try {
-        const auth = getAuth();
-        const user = auth.currentUser;
-
-        if (!user) {
-            throw new Error('User not authenticated');
-        }
-
-        const idToken = await user.getIdToken();
+        const headers = await authHeaders();
         const response = await fetch(`${API_BASE_URL}/api/health`, {
-            headers: {
-                'Authorization': `Bearer ${idToken}`
-            }
+            headers
         });
         return response.ok;
     } catch (error) {
@@ -52,18 +57,9 @@ export const checkBackendHealth = async (): Promise<boolean> => {
 
 export const getDiskSpace = async (): Promise<DiskSpaceInfo | null> => {
     try {
-        const auth = getAuth();
-        const user = auth.currentUser;
-
-        if (!user) {
-            throw new Error('User not authenticated');
-        }
-
-        const idToken = await user.getIdToken();
+        const headers = await authHeaders();
         const response = await fetch(`${API_BASE_URL}/space`, {
-            headers: {
-                'Authorization': `Bearer ${idToken}`
-            }
+            headers
         });
 
         if (!response.ok) {
@@ -87,18 +83,9 @@ export const uploadVideo = async (
     formData.append('shouldCompress', shouldCompress.toString());
 
     try {
-        const auth = getAuth();
-        const user = auth.currentUser;
-
-        if (!user) {
-            throw new Error('User not authenticated');
-        }
-
-        const idToken = await user.getIdToken();
+        const headers = await authHeaders();
         const response = await axios.post(`${API_BASE_URL}/upload`, formData, {
-            headers: {
-                'Authorization': `Bearer ${idToken}`
-            },
+            headers,
             onUploadProgress: (progressEvent) => {
                 if (onProgress && progressEvent.total) {
                     onProgress({

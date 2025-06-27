@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { HardDrive } from 'lucide-react';
+import { Fish, ServerCrash } from 'lucide-react';
 import { getDiskSpace, DiskSpaceInfo } from '../utils/api';
-import Tooltip from './Tooltip';
 
 const DiskSpaceIndicator = () => {
     const [diskSpace, setDiskSpace] = useState<DiskSpaceInfo | null>(null);
@@ -45,8 +44,8 @@ const DiskSpaceIndicator = () => {
 
     // Determine color based on usage
     const getColorClass = () => {
-        if (usedPercentage > 90) return 'bg-red-500';
-        if (usedPercentage > 70) return 'bg-yellow-500';
+        if (usedPercentage > 80) return 'bg-red-500';
+        if (usedPercentage > 50) return 'bg-yellow-500';
         return 'bg-green-500';
     };
 
@@ -62,7 +61,7 @@ const DiskSpaceIndicator = () => {
     if (error || !diskSpace) {
         return (
             <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-lg md:fixed md:bottom-4 md:left-4">
-                <HardDrive className="w-4 h-4 text-red-500" />
+                <ServerCrash className="w-4 h-4 text-red-500" />
                 <span className="text-sm text-gray-600 dark:text-gray-300">Space info unavailable</span>
             </div>
         );
@@ -70,7 +69,7 @@ const DiskSpaceIndicator = () => {
 
     return (
         <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-lg md:fixed md:bottom-4 md:left-4">
-            <HardDrive className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+            <Fish className="w-4 h-4 text-gray-600 dark:text-gray-300" />
             <div className="flex flex-col w-full">
                 <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Disk space</span>

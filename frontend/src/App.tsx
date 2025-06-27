@@ -2,7 +2,6 @@ import { User } from "firebase/auth";
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
 import FileUploader from "./components/FileUploader";
-import BackendStatus from "./components/BackendStatus";
 import DiskSpaceIndicator from "./components/DiskSpaceIndicator";
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
 
@@ -110,11 +109,9 @@ const App = () => {
             </div>
             <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 z-10">
                 <div className="md:hidden space-y-2">
-                    <BackendStatus />
                     <DiskSpaceIndicator />
                 </div>
                 <div className="hidden md:block">
-                    <BackendStatus />
                     <DiskSpaceIndicator />
                 </div>
             </div>

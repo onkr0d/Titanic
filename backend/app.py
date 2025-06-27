@@ -85,6 +85,10 @@ def verify_app_check() -> None:
     if request.method == 'OPTIONS':
         return
     
+    # no AppCheck for health endpoint (Docker health checks)
+    if request.path == '/health':
+        return
+    
     app_check_token = flask.request.headers.get("X-Firebase-AppCheck", default="")
     try:
         app_check.verify_token(app_check_token)

@@ -81,6 +81,10 @@ def verify_firebase_token(f):
 
 @app.before_request
 def verify_app_check() -> None:
+    # no AppCheck for OPTIONS requests (CORS preflight)
+    if request.method == 'OPTIONS':
+        return
+    
     app_check_token = flask.request.headers.get("X-Firebase-AppCheck", default="")
     try:
         app_check.verify_token(app_check_token)

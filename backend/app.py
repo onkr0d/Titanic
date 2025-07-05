@@ -116,7 +116,7 @@ def is_safe_path(filepath):
     except Exception:
         return False
 
-@app.route("/upload", methods=['POST'])
+@app.route("/api/upload", methods=['POST'])
 @verify_firebase_token
 def upload_video():
     try:
@@ -184,7 +184,7 @@ def upload_video():
 def health_check():
     return jsonify({"status": "ok"}), 200
 
-@app.route('/space')
+@app.route('/api/space')
 @verify_firebase_token
 def space():
     # check how much disk space is left
@@ -195,8 +195,6 @@ def space():
 def docker_health_check():
     """Unauthenticated health check endpoint for Docker"""
     return jsonify({"status": "healthy"}), 200
-
-# FIXME: why are some of them using /api/ and others are not ?!
 
 if __name__ == "__main__":
     # app.run(host="0.0.0.0", port=5000, debug=True)

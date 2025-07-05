@@ -4,7 +4,7 @@ import { getToken } from "firebase/app-check";
 import { appCheck } from '../App';
 
 // if in dev, use the emulator
-const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:6969' : 'https://compress.ivan.boston';
+const API_BASE_URL = (import.meta.env.DEV ? 'http://localhost:6969' : 'https://compress.ivan.boston') + '/api';
 
 export interface UploadResponse {
     success: boolean;
@@ -46,7 +46,7 @@ async function authHeaders(): Promise<Record<string, string>> {
 export const checkBackendHealth = async (): Promise<boolean> => {
     try {
         const headers = await authHeaders();
-        const response = await fetch(`${API_BASE_URL}/api/health`, {
+        const response = await fetch(`${API_BASE_URL}/health`, {
             headers
         });
         return response.ok;

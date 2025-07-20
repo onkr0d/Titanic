@@ -26,13 +26,12 @@ logger.info(f"IS_DEV: {IS_DEV}")
 if IS_DEV:
     origins.append("http://localhost:5173")
     origins.append("http://localhost:6969")
+    origins.append("http://localhost:5002")
 
 CORS(app,
      origins=origins,
      allow_headers=["Content-Type","Authorization","X-Firebase-AppCheck"],
      automatic_options=True)
-
-logging.basicConfig(level=logging.DEBUG)
 
 # Initialize Firebase Admin
 cred_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'admin-sdk-cred.json'))
@@ -47,7 +46,7 @@ ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['UNCOMPRESSED_FOLDER'] = UNCOMPRESSED_FOLDER
 app.config['COMPRESSED_FOLDER'] = COMPRESSED_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB max file size, just for testing
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024 * 1024  # 10GB max file size
 
 # Ensure upload directories exist
 os.makedirs(UNCOMPRESSED_FOLDER, exist_ok=True)
@@ -61,6 +60,8 @@ def verify_firebase_token(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if IS_DEV:
+            # When in development mode, we bypass token verification and mock the user.
+            request.user = {'email': 'dev@example.com', 'uid': 'dev-user'}
             return f(*args, **kwargs)
         
         auth_header = request.headers.get('Authorization')
@@ -158,12 +159,17 @@ def upload_video():
                 logger.debug("File saved successfully")
                 
                 # Enqueue the video processing job only if compression is enabled
+                headers = {
+                    'Authorization': request.headers.get('Authorization'),
+                    'X-Firebase-AppCheck': request.headers.get('X-Firebase-AppCheck')
+                }
                 if should_compress:
                     ffmpeg_job = ffmpeg_queue.enqueue(compress_video, args=[filepath])
-                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, depends_on=ffmpeg_job)
+                    # give the umbrel job the auth headers so the umbrel server can verify them
+                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, depends_on=ffmpeg_job, meta=headers)
                 else:
                     # If compression is disabled, just upload the original file
-                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, args=[filepath])
+                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, args=[filepath], meta=headers)
                 
                 return jsonify({
                     'message': 'File uploaded successfully',

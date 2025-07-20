@@ -3,3 +3,7 @@ frontend/functions/.env
 backend/admin-sdk-cred.json
 backend/.env
 frontend/.env
+*.MOV
+backend/dump.rdb
+.env
+**/.env

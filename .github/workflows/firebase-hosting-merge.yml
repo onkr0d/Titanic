@@ -12,6 +12,8 @@ on:
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
+    env: 
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
     defaults:
       run:
         working-directory: frontend
@@ -26,6 +28,8 @@ jobs:
           envkey_VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           envkey_VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
           envkey_VITE_FIREBASE_RECAPTCHA_SITE_KEY: ${{ secrets.VITE_FIREBASE_RECAPTCHA_SITE_KEY }}
+          envkey_VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          envkey_VITE_SENTRY_AUTH_TOKEN: ${{ secrets.VITE_SENTRY_AUTH_TOKEN }}
           fail_on_empty: true
           directory: frontend
       - uses: oven-sh/setup-bun@v2

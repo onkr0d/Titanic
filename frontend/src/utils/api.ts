@@ -84,7 +84,7 @@ export const uploadVideo = async (
 
     try {
         const headers = await authHeaders();
-        const response = await axios.post(`${API_BASE_URL}/upload`, formData, {
+        await axios.post(`${API_BASE_URL}/upload`, formData, {
             headers,
             onUploadProgress: (progressEvent) => {
                 if (onProgress && progressEvent.total) {

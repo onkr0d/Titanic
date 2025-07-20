@@ -1,0 +1,61 @@
+# Docker Compose for Local Development
+# To run: docker compose -f docker-compose.dev.yml up
+
+services:
+  # Backend services (from backend/docker-compose.build.yml)
+  flask:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: titanic_flask_dev
+    command: >
+      sh -c "redis-server &
+             rq worker ffmpeg &
+             rq worker umbrel &
+             python app.py"
+    ports:
+      - "6969:5000"
+    volumes:
+      # Mount source code for hot-reloading (Flask debug mode will use it)
+      - ./backend:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/admin-sdk-cred
+      - IS_DEV=${IS_DEV:-true}
+      - UMBREL_SERVER_URL=http://umbrel:3000/api/upload
+    secrets:
+      - admin-sdk-cred
+    networks:
+      - titanic_dev_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Umbrel service with hot-reloading
+  umbrel:
+    build:
+      context: ./umbrel
+      dockerfile: Dockerfile.dev
+    container_name: titanic_umbrel_dev
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - ./umbrel/src:/app/src
+      - ./umbrel/Cargo.toml:/app/Cargo.toml
+      - ./umbrel/Cargo.lock:/app/Cargo.lock
+      - ./umbrel/media:/data/media
+    networks:
+      - titanic_dev_network
+    # Healthcheck is disabled for cargo-watch, as the server might restart frequently.
+
+networks:
+  titanic_dev_network:
+    driver: bridge
+
+secrets:
+  admin-sdk-cred:
+    file: ./backend/admin-sdk-cred.json 

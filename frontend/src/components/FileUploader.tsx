@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { UploadCloud, X, FileText, CheckCircle, Sparkles } from 'lucide-react';
+import { UploadCloud, X, FileText, Check, Sparkles } from 'lucide-react';
 import { showToast } from '../utils/toast';
 import { uploadVideo } from '../utils/api';
 import Tooltip from './Tooltip';
@@ -181,7 +181,7 @@ const FileUploader = () => {
                                 </div>
                                 <div className="flex items-center ml-2">
                                     {status === 'uploaded' ? (
-                                        <CheckCircle className="w-5 h-5 text-green-500" />
+                                        <Check className="w-5 h-5 text-green-500" />
                                     ) : status === 'uploading' ? (
                                         <div className="w-5 h-5 border-2 border-t-blue-500 rounded-full animate-spin" />
                                     ) : (

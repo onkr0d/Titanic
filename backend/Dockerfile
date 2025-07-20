@@ -45,7 +45,7 @@ COPY --from=builder /app/jobs/ jobs/
 RUN mkdir -p videos/uncompressed videos/compressed
 
 # Ensure startup script is executable
-RUN chmod +x start.sh
+RUN chmod u+x start.sh
 
 # Add pip-installed binaries to PATH
 ENV PATH=/usr/local/bin:$PATH
@@ -58,4 +58,4 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -f http://localhost:5000/health || exit 1
 
 # Launch entrypoint
-CMD ["./start.sh"]
+CMD ["sh", "./start.sh"]

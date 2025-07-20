@@ -30,7 +30,7 @@ if IS_DEV:
 
 CORS(app,
      origins=origins,
-     allow_headers=["Content-Type","Authorization","X-Firebase-AppCheck"],
+     allow_headers=["Content-Type","Authorization","X-Firebase-AppCheck", "baggage", "sentry-trace"],
      automatic_options=True)
 
 # Initialize Firebase Admin

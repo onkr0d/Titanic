@@ -56,6 +56,8 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
             ${{ steps.flask-meta.outputs.tags }}
           labels: ${{ steps.flask-meta.outputs.labels }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
 
       - name: Extract metadata for Caddy
         id: caddy-meta
@@ -73,3 +75,5 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/caddy:latest
             ${{ steps.caddy-meta.outputs.tags }}
           labels: ${{ steps.caddy-meta.outputs.labels }}
+          cache-from: type=gha,scope=caddy
+          cache-to: type=gha,mode=max,scope=caddy

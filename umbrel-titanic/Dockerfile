@@ -40,11 +40,11 @@ RUN addgroup -g 1001 -S titanic && \
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder /app/target/release/titanic-umbrel /app/titanic-umbrel
+COPY --from=builder /app/target/release/umbrel-titanic /app/umbrel-titanic
 
-# Create media directory
-RUN mkdir -p /data/media && \
-    chown -R titanic:titanic /data/media
+# Create media directory and set permissions
+RUN mkdir -p /downloads && \
+    chown -R titanic:titanic /downloads
 
 # Switch to non-root user
 USER titanic
@@ -52,9 +52,5 @@ USER titanic
 # Expose port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
-
 # Run the application
-CMD ["./titanic-umbrel"] 
+CMD ["./umbrel-titanic"] 

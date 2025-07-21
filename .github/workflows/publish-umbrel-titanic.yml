@@ -45,7 +45,11 @@ jobs:
         uses: docker/build-push-action@v6.17.0
         with:
           context: ./umbrel-titanic
-          platforms: linux/arm64,linux/amd64
+          platforms: linux/amd64
           push: true
-          tags: ${{ steps.umbrel-meta.outputs.tags }}
-          labels: ${{ steps.umbrel-meta.outputs.labels }} 
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/umbrel-titanic:latest
+            ${{ steps.umbrel-meta.outputs.tags }}
+          labels: ${{ steps.umbrel-meta.outputs.labels }}
+          cache-from: type=gha,scope=umbrel-titanic
+          cache-to: type=gha,mode=max,scope=umbrel-titanic

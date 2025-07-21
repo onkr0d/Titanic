@@ -1,0 +1,30 @@
+manifestVersion: 1
+id: umbrel-titanic
+category: media
+name: Titanic
+version: "1.0.0"
+icon: https://c6dd0341f521.ngrok-free.app/titanic-icon.png
+tagline: Sink files to your Umbrel
+description: >-
+  Titanic is a complete video upload and compression system that allows users to upload videos through a web interface, compress them on a backend server, and automatically upload them to an Umbrel device running Plex.
+releaseNotes: >-
+  This version also includes lots of minor styling improvements, better
+  error handling, and several bugfixes.
+developer: Ivan
+website: https://github.com/onkr0d/Titanic
+dependencies: []
+repo: https://github.com/onkr0d/Titanic
+support: https://github.com/onkr0d/Titanic/issues
+port: 3000
+gallery:
+  - https://c6dd0341f521.ngrok-free.app/1.png
+  - https://c6dd0341f521.ngrok-free.app/2.png
+  - https://c6dd0341f521.ngrok-free.app/3.png
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+submitter: Umbrel
+submission: https://github.com/getumbrel/umbrel/pull/334
+# yoinked from https://github.com/getumbrel/umbrel-apps/blob/master/plex/umbrel-app.yml#L29C1-L30C1
+permissions:
+  - STORAGE_DOWNLOADS

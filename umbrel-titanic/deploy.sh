@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Titanic Umbrel Component Deployment Script
+# Titanic Umbrel component deployment script for production
 
 set -e
 
@@ -28,19 +28,13 @@ fi
 
 echo "✅ Environment variables loaded"
 
-# Create media directory if it doesn't exist
-if [ ! -d "media" ]; then
-    echo "📁 Creating media directory..."
-    mkdir -p media
-fi
-
 # Stop existing container if running
 echo "🛑 Stopping existing container..."
-docker compose down 2>/dev/null || true
+docker compose -f docker-compose.prod.yml down 2>/dev/null || true
 
 # Build and start the container
 echo "🔨 Building and starting container..."
-docker compose up -d --build
+docker compose -f docker-compose.prod.yml up -d --build
 
 # Wait for container to be healthy
 echo "⏳ Waiting for container to be healthy..."
@@ -48,7 +42,7 @@ timeout=60
 counter=0
 
 while [ $counter -lt $timeout ]; do
-    if docker compose ps | grep -q "healthy"; then
+    if docker compose -f docker-compose.prod.yml ps | grep -q "healthy"; then
         echo "✅ Container is healthy!"
         break
     fi
@@ -61,7 +55,7 @@ done
 if [ $counter -eq $timeout ]; then
     echo "❌ Container failed to become healthy within $timeout seconds"
     echo "📋 Container logs:"
-    docker compose logs
+    docker compose -f docker-compose.prod.yml logs
     exit 1
 fi
 
@@ -77,13 +71,13 @@ fi
 echo "🎉 Titanic Umbrel Component deployed successfully!"
 echo ""
 echo "📊 Container status:"
-docker compose ps
+docker compose -f docker-compose.prod.yml ps
 echo ""
 echo "📋 Logs:"
-docker compose logs --tail=10
+docker compose -f docker-compose.prod.yml logs --tail=10
 echo ""
 echo "🌐 Server is running on http://localhost:3000"
-echo "📁 Media directory: ./media"
+echo "📁 Media is stored in your Umbrel's downloads directory."
 echo ""
-echo "To view logs: docker compose logs -f"
-echo "To stop: docker compose down" 
+echo "To view logs: docker compose -f docker-compose.prod.yml logs -f"
+echo "To stop: docker compose -f docker-compose.prod.yml down" 

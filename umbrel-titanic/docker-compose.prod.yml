@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  titanic-umbrel:
+    build: .
+    container_name: umbrel-titanic
+    ports:
+      - "3000:3000"
+    environment:
+      - BIND_ADDRESS=0.0.0.0:3000
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - PLEX_MEDIA_PATH=${PLEX_MEDIA_PATH:-/downloads}
+      - IS_DEV=${IS_DEV:-false}
+    volumes:
+      - ${UMBREL_ROOT}/data/storage/downloads:/downloads
+    restart: unless-stopped
+    network_mode: host

@@ -55,7 +55,7 @@ IS_DEV=false
 2. Ensure your Firebase project has Authentication enabled
 3. The server will automatically fetch public keys from Firebase for JWT verification
 
-## Deployment
+## Development
 
 ### Option 1: Docker Compose (Recommended)
 

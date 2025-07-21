@@ -24,7 +24,7 @@ impl Config {
                 if cfg!(target_os = "macos") {
                     "./media".to_string()
                 } else {
-                    "/data/media".to_string()
+                    "/downloads".to_string()
                 }
             });
 

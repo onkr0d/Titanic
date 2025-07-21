@@ -5,6 +5,7 @@ on:
       - main
     paths:
       - 'frontend/functions/**'
+      - '.github/workflows/functions-deploy.yml'
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest

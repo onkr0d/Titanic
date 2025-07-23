@@ -131,7 +131,7 @@ def upload_video_to_umbrel(input_file=None):
         raise FileNotFoundError(f"File not found: {compressed_file}")
     
     # Get Umbrel server URL from environment
-    umbrel_url = os.environ.get('UMBREL_SERVER_URL', 'http://localhost:3000/api/upload')
+    umbrel_url = os.environ.get('UMBREL_SERVER_URL', 'http://umbrel:3000/api/upload')
 
     try:
         # Upload to Umbrel server

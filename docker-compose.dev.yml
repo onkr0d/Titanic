@@ -36,7 +36,7 @@ services:
   # Umbrel service with hot-reloading
   umbrel:
     build:
-      context: ./umbrel-titanic
+      context: ./titanic
       dockerfile: Dockerfile.dev
     container_name: titanic_umbrel_dev
     ports:
@@ -44,10 +44,10 @@ services:
     env_file:
       - .env
     volumes:
-      - ./umbrel-titanic/src:/app/src
-      - ./umbrel-titanic/Cargo.toml:/app/Cargo.toml
-      - ./umbrel-titanic/Cargo.lock:/app/Cargo.lock
-      - ./umbrel-titanic/media:/data/media
+      - ./titanic/src:/app/src
+      - ./titanic/Cargo.toml:/app/Cargo.toml
+      - ./titanic/Cargo.lock:/app/Cargo.lock
+      - ./titanic/media:/data/media
     networks:
       - titanic_dev_network
     # Healthcheck is disabled for cargo-watch, as the server might restart frequently.

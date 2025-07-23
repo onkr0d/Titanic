@@ -40,7 +40,7 @@ RUN addgroup -g 1001 -S titanic && \
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder /app/target/release/umbrel-titanic /app/umbrel-titanic
+COPY --from=builder /app/target/release/titanic /app/titanic
 
 # Create media directory and set permissions
 RUN mkdir -p /downloads && \
@@ -53,4 +53,4 @@ USER titanic
 EXPOSE 3000
 
 # Run the application
-CMD ["./umbrel-titanic"] 
+CMD ["./titanic"] 

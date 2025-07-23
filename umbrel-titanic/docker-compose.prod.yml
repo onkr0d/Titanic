@@ -1,8 +1,15 @@
 # yeah lowkey just rename this file to docker-compose.yml when you copy to umbrel
 services:
-  umbrel-titanic:
+  app_proxy:
+    environment:
+      PROXY_AUTH_WHITELIST: "/api/*"
+      PROXY_AUTH_ADD: "false"
+      APP_HOST: titanic_web_1
+      APP_PORT: 3029
+  
+  web:
     image: ghcr.io/onkr0d/titanic/umbrel-titanic:main@sha256:56c7c2fe7a9a3d755f513b480f675cbc4299cda762ee03f6acfee390611fb331
-    container_name: umbrel-titanic
+    container_name: titanic_web
     user: 1000:1000
     environment:
       - BIND_ADDRESS=0.0.0.0:3029
@@ -12,11 +19,4 @@ services:
     volumes:
      - ${APP_DATA_DIR}/downloads:/downloads
     restart: on-failure
-    hostname: umbrel-titanic
-    network_mode: host
-  app_proxy:
-    environment:
-      PROXY_AUTH_WHITELIST: "/api/*"
-      PROXY_AUTH_ADD: "false"
-      APP_HOST: umbrel_titanic_web_1
-      APP_PORT: 3029
+    hostname: titanic_web

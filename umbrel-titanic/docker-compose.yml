@@ -3,11 +3,11 @@ services:
     build: .
     container_name: titanic-umbrel
     ports:
-      - "3000:3000"
+      - "3029:3029"
     environment:
-      - BIND_ADDRESS=0.0.0.0:3000
+      - BIND_ADDRESS=0.0.0.0:3029
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
-      - PLEX_MEDIA_PATH=/data/media
+      - PLEX_MEDIA_PATH=${PLEX_MEDIA_PATH}
       - IS_DEV=${IS_DEV:-false}
     volumes:
       - ./media:/data/media

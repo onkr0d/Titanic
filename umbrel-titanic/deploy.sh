@@ -61,7 +61,7 @@ fi
 
 # Test the health endpoint
 echo "🧪 Testing health endpoint..."
-if curl -f http://localhost:3000/health > /dev/null 2>&1; then
+if curl -f http://localhost:3029/health > /dev/null 2>&1; then
     echo "✅ Health check passed!"
 else
     echo "❌ Health check failed!"
@@ -76,7 +76,7 @@ echo ""
 echo "📋 Logs:"
 docker compose -f docker-compose.prod.yml logs --tail=10
 echo ""
-echo "🌐 Server is running on http://localhost:3000"
+echo "🌐 Server is running on http://localhost:3029"
 echo "📁 Media is stored in your Umbrel's downloads directory."
 echo ""
 echo "To view logs: docker compose -f docker-compose.prod.yml logs -f"

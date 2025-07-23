@@ -13,7 +13,7 @@ pub struct Config {
 impl Config {
     pub fn from_env() -> Result<Self> {
         let bind_address = env::var("BIND_ADDRESS")
-            .unwrap_or_else(|_| "0.0.0.0:3000".to_string());
+            .unwrap_or_else(|_| "0.0.0.0:3029".to_string());
 
         let firebase_project_id = env::var("FIREBASE_PROJECT_ID")
             .context("FIREBASE_PROJECT_ID environment variable is required")?;

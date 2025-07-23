@@ -1,32 +1,22 @@
+# yeah lowkey just rename this file to docker-compose.yml when you copy to umbrel
 services:
-  titanic-umbrel:
-    build: .
-    container_name: titanic-umbrel
-    ports:
-      - "3029:3029"
+  app_proxy:
+    environment:
+      PROXY_AUTH_WHITELIST: "/api/*"
+      PROXY_AUTH_ADD: "false"
+      APP_HOST: titanic_web_1
+      APP_PORT: 3029
+      API_URL: "http://${DEVICE_DOMAIN_NAME}:3029/api/"
+      API_AUTH_REQUIRED: 0
+
+  web:
+    image: ghcr.io/onkr0d/titanic/titanic:main@sha256:993d7358f636c07ff9a03de625958aa0ff6db085643c8168b8180b0990d8e378
+    user: 1000:1000
     environment:
       - BIND_ADDRESS=0.0.0.0:3029
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
-      - PLEX_MEDIA_PATH=${PLEX_MEDIA_PATH}
+      - PLEX_MEDIA_PATH=${PLEX_MEDIA_PATH:-/downloads}
       - IS_DEV=${IS_DEV:-false}
     volumes:
-      - ./media:/data/media
-      - ./logs:/app/logs
-    networks:
-      - titanic_network
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-networks:
-  titanic_network:
-    driver: bridge
-
-volumes:
-  media:
-    driver: local
-  logs:
-    driver: local 
+      - ${APP_DATA_DIR}/downloads:/downloads
+    restart: on-failure

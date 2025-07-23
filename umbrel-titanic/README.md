@@ -39,8 +39,8 @@ Then edit the `.env` file with your configuration:
 # Required: Your Firebase Project ID
 FIREBASE_PROJECT_ID=your-firebase-project-id
 
-# Optional: Server bind address (default: 0.0.0.0:3000)
-BIND_ADDRESS=0.0.0.0:3000
+# Optional: Server bind address (default: 0.0.0.0:3029)
+BIND_ADDRESS=0.0.0.0:3029
 
 # Optional: Plex media directory path (default: /data/media)
 PLEX_MEDIA_PATH=/data/media
@@ -130,7 +130,7 @@ The container includes health checks that can be monitored by Docker or external
 
 1. **Authentication Errors**: Ensure your Firebase Project ID is correct
 2. **Permission Errors**: Check that the media directory is writable
-3. **Network Issues**: Verify the server is accessible on port 3000
+3. **Network Issues**: Verify the server is accessible on port 3029
 
 ### Logs
 
@@ -143,7 +143,7 @@ docker compose logs -f titanic-umbrel
 
 Test the health endpoint:
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:3029/health
 ```
 
 ## Development

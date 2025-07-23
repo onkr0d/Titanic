@@ -1,11 +1,11 @@
 # yeah lowkey just rename this file to docker-compose.yml when you copy to umbrel
 services:
   umbrel-titanic:
-    image: ghcr.io/onkr0d/titanic/umbrel-titanic:main@sha256:17eb16aa54885ed2d4903584741e15cb7a8765a1edf3b9e09b367b6cdf400e5b
+    image: ghcr.io/onkr0d/titanic/umbrel-titanic:main@sha256:56c7c2fe7a9a3d755f513b480f675cbc4299cda762ee03f6acfee390611fb331
     container_name: umbrel-titanic
     user: 1000:1000
     environment:
-      - BIND_ADDRESS=0.0.0.0:3000
+      - BIND_ADDRESS=0.0.0.0:3029
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
       - PLEX_MEDIA_PATH=${PLEX_MEDIA_PATH:-/downloads}
       - IS_DEV=${IS_DEV:-false}
@@ -17,3 +17,6 @@ services:
   app_proxy:
     environment:
       PROXY_AUTH_WHITELIST: "/api/*"
+      PROXY_AUTH_ADD: "false"
+      APP_HOST: umbrel_titanic_web_1
+      APP_PORT: 3029

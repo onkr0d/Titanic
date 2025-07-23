@@ -47,7 +47,7 @@ This project includes a unified Docker Compose setup to run the entire backend (
 
 ### Services
 - **Backend API:** Accessible at `http://localhost:6969`
-- **Umbrel Service:** Accessible at `http://localhost:3000`
+- **Umbrel Service:** Accessible at `http://localhost:3029`
 - **Hot-Reloading:** The Umbrel (Rust) service will automatically restart when you save changes to any file in `umbrel/src/`.
 
 ### Frontend Development

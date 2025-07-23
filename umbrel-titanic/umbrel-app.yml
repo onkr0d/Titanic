@@ -5,7 +5,7 @@ tagline: Sink files to your Umbrel
 icon: https://c6dd0341f521.ngrok-free.app/titanic-icon.png
 category: Development
 version: "1.0.0"
-port: 3000
+port: 3029
 description: >-
   Titanic is a complete video upload and compression system that allows users to upload videos through a web interface, compress them on a backend server, and automatically upload them to an Umbrel device running Plex.
 developer: Ivan

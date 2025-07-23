@@ -54,5 +54,5 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic:latest
             ${{ steps.titanic-meta.outputs.tags }}
           labels: ${{ steps.titanic-meta.outputs.labels }}
-          cache-from: type=gha,scope=titanic
-          cache-to: type=gha,mode=max,scope=titanic
+          cache-from: type=gha,scope=titanic-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=titanic-${{ matrix.platform }}

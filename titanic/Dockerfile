@@ -50,7 +50,7 @@ RUN mkdir -p /downloads && \
 USER titanic
 
 # Expose port
-EXPOSE 3000
+EXPOSE 3029
 
 # Run the application
 CMD ["./titanic"] 

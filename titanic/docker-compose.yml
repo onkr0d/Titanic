@@ -12,6 +12,7 @@ services:
       - default
 
   web:
+    # MUST pin to specific sha256 as per Umbrel requirements
     image: ghcr.io/onkr0d/titanic/titanic:main@sha256:993d7358f636c07ff9a03de625958aa0ff6db085643c8168b8180b0990d8e378
     user: 1000:1000
     environment:

@@ -9,21 +9,24 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
+# Add x86_64 musl target for cross-compilation
+RUN rustup target add x86_64-unknown-linux-musl
+
 # Copy Cargo files
 COPY Cargo.toml Cargo.lock* ./
 
 # Create a dummy main.rs to build dependencies
 RUN mkdir src && echo "fn main() {}" > src/main.rs
 
-# Build dependencies
-RUN cargo build --release
+# Build dependencies for x86_64 target
+RUN cargo build --release --target x86_64-unknown-linux-musl
 
 # Remove dummy main.rs and copy actual source
 RUN rm src/main.rs
 COPY src/ src/
 
-# Build the application
-RUN cargo build --release
+# Build the application for x86_64 target
+RUN cargo build --release --target x86_64-unknown-linux-musl
 
 # Runtime stage
 FROM alpine:latest
@@ -39,8 +42,8 @@ RUN addgroup -g 1001 -S titanic && \
 
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /app/target/release/titanic /app/titanic
+# Copy binary from builder (cross-compiled target directory)
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/titanic /app/titanic
 
 # Create media directory and set permissions
 RUN mkdir -p /downloads && \

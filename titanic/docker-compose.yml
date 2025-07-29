@@ -1,31 +1,15 @@
-# yeah lowkey just rename this file to docker-compose.yml when you copy to umbrel
 services:
-  app_proxy:
-    environment:
-      PROXY_AUTH_WHITELIST: "/api/*"
-      PROXY_AUTH_ADD: "false"
-      APP_HOST: web
-      APP_PORT: 3029
-      API_URL: "http://${DEVICE_DOMAIN_NAME}:3029/api/"
-      API_AUTH_REQUIRED: 0
-    networks:
-      - default
-
-  web:
+  app:
     # MUST pin to specific sha256 as per Umbrel requirements
-    image: ghcr.io/onkr0d/titanic/titanic:main@sha256:993d7358f636c07ff9a03de625958aa0ff6db085643c8168b8180b0990d8e378
-    user: 1000:1000
+    image: ghcr.io/onkr0d/titanic/titanic:main@sha256:d8b309543995e3645f8794e7c1b4cc4b0353d931ec4fca5a8300b4ec771d888b
+    ports:
+      - "0.0.0.0:3029:3029"
     environment:
       - BIND_ADDRESS=0.0.0.0:3029
-      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-titanic-uploader}
       - PLEX_MEDIA_PATH=${PLEX_MEDIA_PATH:-/downloads}
       - IS_DEV=${IS_DEV:-false}
+      - RUST_LOG=debug
     volumes:
       - ${APP_DATA_DIR}/downloads:/downloads
     restart: on-failure
-    networks:
-      - default
-
-networks:
-  default:
-    driver: bridge

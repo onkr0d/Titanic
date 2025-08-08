@@ -1,11 +1,13 @@
 # Build stage
 FROM rust:1.88-alpine AS builder
 
-# Install build dependencies
+# Install build dependencies for vendored OpenSSL compilation
 RUN apk add --no-cache \
     musl-dev \
     pkgconfig \
-    openssl-dev
+    perl \
+    make \
+    gcc
 
 WORKDIR /app
 

@@ -5,13 +5,15 @@ FROM --platform=$BUILDPLATFORM rust:1.88-alpine AS builder
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
-# Install build dependencies for vendored OpenSSL compilation
+# Install build dependencies for cross-compilation
 RUN apk add --no-cache \
     musl-dev \
     pkgconfig \
     perl \
     make \
-    gcc
+    gcc \
+    clang \
+    lld
 
 WORKDIR /app
 
@@ -22,14 +24,27 @@ RUN case "$TARGETPLATFORM" in \
         *) echo "Unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
     esac
 
+# Configure Cargo for cross-compilation
+RUN mkdir -p ~/.cargo && \
+    case "$TARGETPLATFORM" in \
+        "linux/amd64") \
+            echo '[target.x86_64-unknown-linux-musl]' >> ~/.cargo/config.toml && \
+            echo 'linker = "clang"' >> ~/.cargo/config.toml && \
+            echo 'rustflags = ["-C", "link-arg=-fuse-ld=lld", "-C", "target-feature=+crt-static"]' >> ~/.cargo/config.toml ;; \
+        "linux/arm64") \
+            echo '[target.aarch64-unknown-linux-musl]' >> ~/.cargo/config.toml && \
+            echo 'linker = "clang"' >> ~/.cargo/config.toml && \
+            echo 'rustflags = ["-C", "link-arg=-fuse-ld=lld", "-C", "link-arg=--target=aarch64-unknown-linux-musl", "-C", "target-feature=+crt-static"]' >> ~/.cargo/config.toml ;; \
+    esac
+
 # Copy Cargo files
 COPY Cargo.toml Cargo.lock* ./
 
 # Create a dummy main.rs to build dependencies
 RUN mkdir src && echo "fn main() {}" > src/main.rs
 
-# Set environment for static linking
-ENV RUSTFLAGS="-C target-feature=+crt-static"
+# Environment for vendored OpenSSL
+ENV OPENSSL_STATIC=1
 
 # Set the target based on platform
 RUN case "$TARGETPLATFORM" in \

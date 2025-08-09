@@ -12,11 +12,8 @@ env:
   IMAGE_NAME: onkr0d/titanic
 
 jobs:
-  build-and-push:
+  build-and-push-umbrel-titanic:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        platform: [linux/amd64, linux/arm64]
     permissions:
       contents: read
       packages: write
@@ -44,15 +41,15 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic
 
-      - name: Build and push Umbrel image (${{ matrix.platform }})
+      - name: Build and push multi-platform Umbrel image
         uses: docker/build-push-action@v6.17.0
         with:
           context: ./titanic
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic:latest
             ${{ steps.titanic-meta.outputs.tags }}
           labels: ${{ steps.titanic-meta.outputs.labels }}
-          cache-from: type=gha,scope=titanic-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=titanic-${{ matrix.platform }}
+          cache-from: type=gha,scope=titanic
+          cache-to: type=gha,mode=max,scope=titanic

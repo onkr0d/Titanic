@@ -1,9 +1,14 @@
+version: "3.7"
+
 services:
   app:
     # MUST pin to specific sha256 as per Umbrel requirements
-    image: ghcr.io/onkr0d/titanic/titanic:main@sha256:d8b309543995e3645f8794e7c1b4cc4b0353d931ec4fca5a8300b4ec771d888b
+    image: ghcr.io/onkr0d/titanic/titanic:main@sha256:43f6a5553d16b278e40e40ea3898dd7c3f845c817b831495f7f8c3e2c091ad76
+    # user: "1001:1001"  # Temporarily disabled for debugging
+    restart: on-failure
+    stop_grace_period: 1m
     ports:
-      - "0.0.0.0:3029:3029"
+      - 3029:3029
     environment:
       - BIND_ADDRESS=0.0.0.0:3029
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-probably not critical}
@@ -12,4 +17,3 @@ services:
       - RUST_LOG=debug
     volumes:
       - ${APP_DATA_DIR}/downloads:/downloads
-    restart: on-failure

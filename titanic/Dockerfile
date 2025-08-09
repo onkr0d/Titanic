@@ -9,12 +9,13 @@ ARG BUILDPLATFORM
 RUN apt-get update && apt-get install -y \
     wget \
     xz-utils \
+    && mkdir -p /opt \
     && ARCH=$(uname -m | sed 's/aarch64/aarch64/;s/x86_64/x86_64/') \
     && wget https://ziglang.org/download/0.13.0/zig-linux-${ARCH}-0.13.0.tar.xz \
-    && tar -xf zig-linux-*.tar.xz \
-    && mv zig-linux-* /opt/zig \
+    && tar -xf zig-linux-${ARCH}-0.13.0.tar.xz \
+    && mv zig-linux-${ARCH}-0.13.0 /opt/zig \
     && ln -s /opt/zig/zig /usr/local/bin/zig \
-    && rm zig-linux-*.tar.xz
+    && rm zig-linux-${ARCH}-0.13.0.tar.xz
 
 # Install cargo-zigbuild for easy cross-compilation
 RUN cargo install cargo-zigbuild

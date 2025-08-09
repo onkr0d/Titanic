@@ -2,7 +2,7 @@ manifestVersion: 1
 id: titanic
 name: Titanic
 tagline: Sink files to your Umbrel
-icon: https://c6dd0341f521.ngrok-free.app/titanic-icon.png
+icon: https://976cf3e3fab1.ngrok-free.app/titanic-icon.png
 category: Development
 version: "1.0.0"
 port: 3029
@@ -15,9 +15,9 @@ submission: https://github.com/onkr0d/Titanic/
 repo: https://github.com/onkr0d/Titanic
 support: https://github.com/onkr0d/Titanic/issues
 gallery:
-  - https://c6dd0341f521.ngrok-free.app/1.png
-  - https://c6dd0341f521.ngrok-free.app/2.png
-  - https://c6dd0341f521.ngrok-free.app/3.png
+  - https://976cf3e3fab1.ngrok-free.app/1.png
+  - https://976cf3e3fab1.ngrok-free.app/2.png
+  - https://976cf3e3fab1.ngrok-free.app/3.png
 releaseNotes: >-
   Glorious release.
 dependencies: []
@@ -27,3 +27,13 @@ defaultPassword: ""
 # yoinked from https://github.com/getumbrel/umbrel-apps/blob/master/plex/umbrel-app.yml#L29C1-L30C1
 permissions:
   - STORAGE_DOWNLOADS
+
+# Configure Umbrel's reverse proxy and Tor HS for this app
+app_proxy:
+  default:
+    container: app
+    port: 3029
+    path: /
+    initialCheck:
+      path: /health
+      timeout: 120

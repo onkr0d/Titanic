@@ -1,9 +1,7 @@
-version: "3.7"
-
 services:
   app:
     # MUST pin to specific sha256 as per Umbrel requirements
-    image: ghcr.io/onkr0d/titanic/titanic:main@sha256:43f6a5553d16b278e40e40ea3898dd7c3f845c817b831495f7f8c3e2c091ad76
+    image: ghcr.io/onkr0d/titanic/titanic:main@sha256:589440a4207d2665d2fa48dc5c89ffa32061b963bf92457aceb17d10c00467a1
     # user: "1001:1001"  # Temporarily disabled for debugging
     restart: on-failure
     stop_grace_period: 1m
@@ -17,3 +15,12 @@ services:
       - RUST_LOG=debug
     volumes:
       - ${APP_DATA_DIR}/downloads:/downloads
+
+  app_proxy:
+    image: ghcr.io/getumbrel/umbrel-apps/app-proxy:latest
+    environment:
+      PROXY_AUTH_ADD: "true"
+      PROXY_AUTH_WHITELIST: "/api/*"
+    restart: unless-stopped
+    depends_on:
+      - app

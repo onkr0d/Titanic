@@ -63,9 +63,9 @@ RUN addgroup -g 1001 -S titanic && \
 
 WORKDIR /app
 
-# Copy binary from builder based on platform
+# Copy binary from builder based on platform (match musl targets deterministically)
 ARG TARGETPLATFORM
-COPY --from=builder /app/target/*/*/release/titanic /app/titanic
+COPY --from=builder /app/target/*-unknown-linux-musl/release/titanic /app/titanic
 
 # Create media directory and set permissions
 RUN mkdir -p /downloads && \
@@ -77,5 +77,8 @@ USER titanic
 # Expose port
 EXPOSE 3029
 
+# Ensure the binary is executable and visible in logs at build time
+RUN test -f /app/titanic && chmod +x /app/titanic && ls -l /app/titanic
+
 # Run the application
-CMD ["./titanic"]
+ENTRYPOINT ["/app/titanic"]

@@ -47,7 +47,7 @@ pylsqpack==0.3.22
 pyOpenSSL==25.0.0
 pyparsing==3.2.3
 redis==6.1.0
-requests==2.32.3
+requests==2.32.5
 rq==2.3.3
 rsa==4.9.1
 service-identity==24.2.0

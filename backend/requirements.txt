@@ -38,7 +38,7 @@ MarkupSafe==3.0.2
 msgpack==1.1.0
 priority==2.0.0
 proto-plus==1.26.1
-protobuf==5.29.4
+protobuf==6.32.0
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pycparser==2.22

@@ -20,7 +20,7 @@
     "axios": "^1.9.0",
     "caniuse-lite": "^1.0.30001727",
     "firebase": "^11.9.1",
-    "lucide-react": "^0.471.2",
+    "lucide-react": "^0.541.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-toastify": "^11.0.5"

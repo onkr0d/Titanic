@@ -1,84 +1,61 @@
-# Build stage - use Debian for better cross-compilation support
+# ---------- builder ----------
 FROM --platform=$BUILDPLATFORM rust:1.88 AS builder
+ARG TARGETARCH
+ARG BUILDARCH
 
-# Enable multi-platform arguments
-ARG TARGETPLATFORM
-ARG BUILDPLATFORM
-
-# Install Zig for cross-compilation
-RUN apt-get update && apt-get install -y \
-    wget \
-    xz-utils \
-    && mkdir -p /opt \
-    && ARCH=$(uname -m | sed 's/aarch64/aarch64/;s/x86_64/x86_64/') \
-    && wget https://ziglang.org/download/0.13.0/zig-linux-${ARCH}-0.13.0.tar.xz \
-    && tar -xf zig-linux-${ARCH}-0.13.0.tar.xz \
-    && mv zig-linux-${ARCH}-0.13.0 /opt/zig \
-    && ln -s /opt/zig/zig /usr/local/bin/zig \
-    && rm zig-linux-${ARCH}-0.13.0.tar.xz
-
-# Install cargo-zigbuild for easy cross-compilation
-RUN cargo install cargo-zigbuild
+# zig + cargo-zigbuild
+RUN set -eux; \
+    apt-get update && apt-get install -y wget xz-utils; \
+    case "$BUILDARCH" in \
+      amd64) ZIG_ARCH=x86_64 ;; \
+      arm64) ZIG_ARCH=aarch64 ;; \
+      *) echo "Unsupported BUILDARCH=$BUILDARCH" >&2; exit 1 ;; \
+    esac; \
+    wget -qO /tmp/zig.tgz "https://ziglang.org/download/0.13.0/zig-linux-$ZIG_ARCH-0.13.0.tar.xz"; \
+    tar -C /opt -xf /tmp/zig.tgz || true; \
+    ln -sf "/opt/zig-linux-$ZIG_ARCH-0.13.0/zig" /usr/local/bin/zig; \
+    cargo install --locked cargo-zigbuild
 
 WORKDIR /app
 
-# Add both targets
-RUN rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
-
-# Copy Cargo files
-COPY Cargo.toml Cargo.lock* ./
-
-# Create a dummy main.rs to build dependencies
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-
-# Build dependencies with zigbuild based on target platform
-RUN case "$TARGETPLATFORM" in \
-        "linux/amd64") cargo zigbuild --release --target x86_64-unknown-linux-musl ;; \
-        "linux/arm64") cargo zigbuild --release --target aarch64-unknown-linux-musl ;; \
-        *) echo "Unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
+# Resolve triple from TARGETARCH (what BuildKit sets for the target platform)
+# See: Docker build variables docs
+# https://docs.docker.com/build/building/variables/
+RUN case "$TARGETARCH" in \
+        amd64)  echo x86_64-unknown-linux-musl  > /tmp/TARGET_TRIPLE ;; \
+        arm64)  echo aarch64-unknown-linux-musl > /tmp/TARGET_TRIPLE ;; \
+        *) echo "Unsupported TARGETARCH=$TARGETARCH" >&2; exit 1 ;; \
     esac
 
-# Remove dummy main.rs and copy actual source
-RUN rm src/main.rs
+# Install std sources and common MUSL targets for cross builds
+RUN rustup component add rust-src \
+    && rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+
+# Cache deps
+COPY Cargo.toml Cargo.lock ./
+RUN set -eux; triple="$(cat /tmp/TARGET_TRIPLE)"; \
+    mkdir -p src; echo "fn main() {}" > src/main.rs; \
+    cargo zigbuild --release --target "$triple"
+
+# Build real app
+RUN rm -f src/main.rs
 COPY src/ src/
+RUN set -eux; triple="$(cat /tmp/TARGET_TRIPLE)"; \
+    cargo zigbuild --release --target "$triple"; \
+    cp "target/$triple/release/titanic" /titanic
 
-# Build the application with zigbuild
-RUN case "$TARGETPLATFORM" in \
-        "linux/amd64") cargo zigbuild --release --target x86_64-unknown-linux-musl ;; \
-        "linux/arm64") cargo zigbuild --release --target aarch64-unknown-linux-musl ;; \
-        *) echo "Unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
-    esac
-
-# Runtime stage
-FROM alpine:latest
-
-# Install runtime dependencies
-RUN apk add --no-cache \
-    ca-certificates \
-    libc6-compat
-
-# Create non-root user
-RUN addgroup -g 1001 -S titanic && \
-    adduser -S titanic -u 1001
-
+# ---------- runtime ----------
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates libc6-compat
 WORKDIR /app
 
-# Copy binary from builder based on platform (match musl targets deterministically)
-ARG TARGETPLATFORM
-COPY --from=builder /app/target/*-unknown-linux-musl/release/titanic /app/titanic
+# Copy the *exact* binary for this arch to a stable path
+COPY --from=builder /titanic /usr/local/bin/titanic
+RUN chmod +x /usr/local/bin/titanic
 
-# Create media directory and set permissions
-RUN mkdir -p /downloads && \
-    chown -R titanic:titanic /app /downloads
+# (optional) run as non-root once the binary is in place
+RUN addgroup -g 1001 -S titanic && adduser -S titanic -u 1001
+USER 1001:1001
 
-# Switch to non-root user
-USER titanic
-
-# Expose port
 EXPOSE 3029
-
-# Ensure the binary is executable and visible in logs at build time
-RUN test -f /app/titanic && chmod +x /app/titanic && ls -l /app/titanic
-
-# Run the application
-ENTRYPOINT ["/app/titanic"]
+ENTRYPOINT ["/usr/local/bin/titanic"]

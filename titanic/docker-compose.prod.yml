@@ -1,12 +1,17 @@
 services:
+  app_proxy:
+    environment:
+      APP_HOST: titanic_app_1
+      PROXY_AUTH_ADD: "true"
+      PROXY_AUTH_WHITELIST: "/api/*"
+      APP_PORT: 3029
+
   app:
     # MUST pin to specific sha256 as per Umbrel requirements
-    image: ghcr.io/onkr0d/titanic/titanic:main@sha256:589440a4207d2665d2fa48dc5c89ffa32061b963bf92457aceb17d10c00467a1
+    image: ghcr.io/onkr0d/titanic/titanic:main@sha256:fb3edd22ff4a259ffad02fc3842fdda08adc93e36b7506d76241fe6ccea04350
     # user: "1001:1001"  # Temporarily disabled for debugging
     restart: on-failure
     stop_grace_period: 1m
-    ports:
-      - 3029:3029
     environment:
       - BIND_ADDRESS=0.0.0.0:3029
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-probably not critical}
@@ -15,12 +20,3 @@ services:
       - RUST_LOG=debug
     volumes:
       - ${APP_DATA_DIR}/downloads:/downloads
-
-  app_proxy:
-    image: ghcr.io/getumbrel/umbrel-apps/app-proxy:latest
-    environment:
-      PROXY_AUTH_ADD: "true"
-      PROXY_AUTH_WHITELIST: "/api/*"
-    restart: unless-stopped
-    depends_on:
-      - app

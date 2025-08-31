@@ -2,7 +2,7 @@ manifestVersion: 1
 id: titanic
 name: Titanic
 tagline: Sink files to your Umbrel
-icon: https://976cf3e3fab1.ngrok-free.app/titanic-icon.png
+icon: https://60b4172760aa.ngrok-free.app/titanic-icon.png
 category: Development
 version: "1.0.0"
 port: 3029
@@ -15,9 +15,9 @@ submission: https://github.com/onkr0d/Titanic/
 repo: https://github.com/onkr0d/Titanic
 support: https://github.com/onkr0d/Titanic/issues
 gallery:
-  - https://976cf3e3fab1.ngrok-free.app/1.png
-  - https://976cf3e3fab1.ngrok-free.app/2.png
-  - https://976cf3e3fab1.ngrok-free.app/3.png
+  - https://60b4172760aa.ngrok-free.app/1.png
+  - https://60b4172760aa.ngrok-free.app/2.png
+  - https://60b4172760aa.ngrok-free.app/3.png
 releaseNotes: >-
   Glorious release.
 dependencies: []

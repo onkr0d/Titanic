@@ -66,7 +66,7 @@ IS_DEV=false
 
 ```bash
 cd umbrel
-docker compose up -d
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ## API Endpoints
@@ -136,7 +136,7 @@ The container includes health checks that can be monitored by Docker or external
 
 View logs with:
 ```bash
-docker compose logs -f titanic-umbrel
+docker compose -f docker-compose.prod.yml logs -f titanic-umbrel
 ```
 
 ### Manual Testing

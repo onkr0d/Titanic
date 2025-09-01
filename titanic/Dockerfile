@@ -49,13 +49,8 @@ FROM alpine:3.20
 RUN apk add --no-cache ca-certificates libc6-compat
 WORKDIR /app
 
-# Copy the exact target binary to a stable path (no wildcards)
-ARG TARGETARCH
-RUN case "$TARGETARCH" in \
-        amd64)  TARGET_TRIPLE="x86_64-unknown-linux-musl" ;; \
-        arm64)  TARGET_TRIPLE="aarch64-unknown-linux-musl" ;; \
-    esac
-COPY --from=builder /app/target/${TARGET_TRIPLE}/release/titanic /usr/local/bin/titanic
+# Copy the compiled binary regardless of target triple directory
+COPY --from=builder /app/target/*/release/titanic /usr/local/bin/titanic
 RUN chmod +x /usr/local/bin/titanic
 
 # (optional) drop privileges

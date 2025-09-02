@@ -7,7 +7,7 @@ certifi==2025.4.26
 cffi==1.17.1
 charset-normalizer==3.4.2
 click==8.2.0
-cryptography==44.0.3
+cryptography==45.0.7
 ffmpeg-python==0.2.0
 firebase-admin==6.8.0 # https://github.com/firebase/firebase-admin-python/issues/803 wtf
 Flask==3.1.1

@@ -164,12 +164,12 @@ def upload_video():
                     'X-Firebase-AppCheck': request.headers.get('X-Firebase-AppCheck')
                 }
                 if should_compress:
-                    ffmpeg_job = ffmpeg_queue.enqueue(compress_video, args=[filepath])
+                    ffmpeg_job = ffmpeg_queue.enqueue(compress_video, args=[filepath], timeout=3600)
                     # give the umbrel job the auth headers so the umbrel server can verify them
-                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, depends_on=ffmpeg_job, meta=headers)
+                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, depends_on=ffmpeg_job, meta=headers, timeout=3600)
                 else:
                     # If compression is disabled, just upload the original file
-                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, args=[filepath], meta=headers)
+                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, args=[filepath], meta=headers, timeout=3600)
                 
                 return jsonify({
                     'message': 'File uploaded successfully',

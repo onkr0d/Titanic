@@ -11,7 +11,7 @@ http://compress.ivan.boston {
 # for dev
 localhost:443 {
 	tls internal
-	reverse_proxy flask:5000
+	reverse_proxy localhost:5000
 }
 
 # Proxy from port 5000
@@ -33,7 +33,7 @@ compress.ivan.boston {
     }
 
 	# Reverse proxy to flask service
-	reverse_proxy flask:5000 {
+	reverse_proxy localhost:5000 {
 		header_up Host {host}
 		header_up X-Real-IP {remote_host}
 	}

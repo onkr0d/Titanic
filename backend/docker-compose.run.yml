@@ -1,8 +1,7 @@
 services:
   flask:
     image: ghcr.io/onkr0d/titanic/backend:latest
-    expose:
-      - "5000"
+    network_mode: host  # Use host networking to access Tailscale
     volumes:
       - ./videos:/app/videos
     environment:
@@ -10,8 +9,6 @@ services:
       - UMBREL_SERVER_URL=http://umbrel:3029/api/upload
     secrets:
       - admin-sdk-cred
-    networks:
-      - app_network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
@@ -22,19 +19,14 @@ services:
 
   caddy:
     image: ghcr.io/onkr0d/titanic/caddy:latest
-    ports:
-      - "80:80"
-      - "443:443"
+    network_mode: host  # Use host networking to match Flask
     volumes:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      flask:
-        condition: service_healthy
-    networks:
-      - app_network
+      - flask
     healthcheck:
-      test: ["CMD", "curl", "-f", "-k", "https://localhost:443/health"]
+      test: ["CMD", "curl", "-f", "-k", "https://localhost/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -43,6 +35,7 @@ services:
 
   watchtower:
     image: containrrr/watchtower
+    network_mode: host  # Use host networking
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - $HOME/.docker/config.json:/config.json:ro
@@ -50,13 +43,7 @@ services:
       - WATCHTOWER_POLL_INTERVAL=60
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_LABEL_ENABLE=true
-    networks:
-      - app_network
     restart: unless-stopped
-
-networks:
-  app_network:
-    driver: bridge
 
 volumes:
   caddy_data:

@@ -2,7 +2,8 @@ version: '3.7'
 
 services:
   app:
-    image: ghcr.io/onkr0d/titanic/titanic:latest@sha256:d78f468e77b466a8ecda1e9d6b882fa94d9fa63cb44c5f6ea7cff03e0d8c4ac4
+    image: ghcr.io/onkr0d/titanic/titanic:latest@sha256:20316cbfec3c6ec1ab8bfef1bf798d30a99125790d06b85ed2c4f39793ee5192
+    user: "1001:1001"
     restart: unless-stopped
     ports:
       - "${APP_TITANIC_PORT:-3029}:3029"

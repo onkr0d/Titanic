@@ -2,14 +2,14 @@ version: '3.7'
 
 services:
   app:
-    image: ghcr.io/onkr0d/titanic/titanic:latest
+    image: ghcr.io/onkr0d/titanic/titanic:latest@sha256:d78f468e77b466a8ecda1e9d6b882fa94d9fa63cb44c5f6ea7cff03e0d8c4ac4
     restart: unless-stopped
     ports:
       - "${APP_TITANIC_PORT:-3029}:3029"
     environment:
       - RUST_LOG=info
       - IS_DEV=false
-      - FIREBASE_PROJECT_ID=${APP_TITANIC_WIDGET_FIREBASE_PROJECT_ID}
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-probably not critical}
       - PLEX_MEDIA_PATH=/data/media
     volumes:
       - ${APP_DATA_DIR}/data:/data

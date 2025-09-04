@@ -7,6 +7,7 @@ services:
       - ./videos:/app/videos
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/admin-sdk-cred
+      - UMBREL_SERVER_URL=http://umbrel:3029/api/upload
     secrets:
       - admin-sdk-cred
     networks:

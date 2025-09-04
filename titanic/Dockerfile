@@ -33,9 +33,11 @@ RUN apk add --no-cache \
 RUN addgroup -g 1001 -S titanic && \
     adduser -u 1001 -S titanic -G titanic
 
-# Create data directory
-RUN mkdir -p /data/media && \
+# Create data directory (for app data, not media files)
+RUN mkdir -p /data && \
     chown -R titanic:titanic /data
+
+# Note: /downloads will be mounted from host, so we don't create it here
 
 # Copy the binary from builder stage
 COPY --from=builder /app/target/release/titanic /usr/local/bin/titanic

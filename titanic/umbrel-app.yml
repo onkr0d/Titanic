@@ -34,9 +34,10 @@ widgets:
     required: true
     value: ""
 
-# yoinked from https://github.com/getumbrel/umbrel-apps/blob/master/plex/umbrel-app.yml#L29C1-L30C1
+# Permissions for accessing Plex media directory
 permissions:
   - STORAGE_DOWNLOADS
+  - STORAGE_MEDIA
 
 # Configure Umbrel's reverse proxy and Tor HS for this app
 app_proxy:

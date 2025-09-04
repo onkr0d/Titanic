@@ -10,9 +10,10 @@ services:
       - RUST_LOG=info
       - IS_DEV=false
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-probably not critical}
-      - PLEX_MEDIA_PATH=/data/media
+      - PLEX_MEDIA_PATH=/downloads
     volumes:
       - ${APP_DATA_DIR}/data:/data
+      - ${UMBREL_ROOT}/home/Downloads:/downloads
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3029/health"]
       interval: 30s

@@ -1,12 +1,35 @@
+# Rust build artifacts
 target/
-Dockerfile
-.dockerignore
-.gitignore
+
+# Development files
+.env
+*.log
+logs/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
 .git/
+.gitignore
+
+# Documentation
 README.md
 *.md
-.env
-.env.*
-logs/
+
+# Assets and media (will be mounted as volumes)
 media/
-*.sh
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Umbrel specific
+umbrel-app.yml

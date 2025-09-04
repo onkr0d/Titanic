@@ -1,0 +1,21 @@
+version: '3.7'
+
+services:
+  app:
+    image: ghcr.io/onkr0d/titanic/titanic:latest
+    restart: unless-stopped
+    ports:
+      - "${APP_TITANIC_PORT:-3029}:3029"
+    environment:
+      - RUST_LOG=info
+      - IS_DEV=false
+      - FIREBASE_PROJECT_ID=${APP_TITANIC_WIDGET_FIREBASE_PROJECT_ID}
+      - PLEX_MEDIA_PATH=/data/media
+    volumes:
+      - ${APP_DATA_DIR}/data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3029/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

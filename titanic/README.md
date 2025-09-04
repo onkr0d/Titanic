@@ -6,9 +6,43 @@ This is the Umbrel component of the Titanic project - a Rust server that handles
 
 For instructions on how to run this service as part of the unified development environment, please see the main [README.md](../../README.md) in the root of this project.
 
-## Production Deployment
+## Umbrel Deployment
 
-TODO
+### Installation
+
+1. **Clone to Umbrel App Store:**
+   ```bash
+   # On your Umbrel device, clone this repository to the app store directory
+   cd /home/umbrel/umbrel/app-stores/getumbrel-umbrel-apps-github-53f74447
+   git clone https://github.com/onkr0d/Titanic.git titanic
+   cd titanic
+   ```
+
+2. **Install via Umbrel:**
+   ```bash
+   # Install the app using Umbrel's CLI
+   umbreld client apps.install.mutate --appId titanic
+   ```
+
+   ^ if the above fails, run ```sudo docker pull [image]``` so it's up to date and exists on local machine. also, if its a private container registry you must figure that out yourself
+
+3. **Configure Firebase:**
+   - Open the Titanic app in your Umbrel dashboard
+   - Enter your Firebase Project ID in the configuration widget
+   - The app will automatically start with the provided configuration
+
+### What Umbrel Handles
+
+Umbrel automatically manages:
+- Docker container lifecycle
+- Network configuration and reverse proxy
+- Volume mounting for persistent data
+- Health checks and monitoring
+- App updates and rollbacks
+- Environment variable configuration through the UI
+
+**Note:** For Umbrel deployment, you don't need to create or manage `.env` files. Configuration is handled through the Umbrel dashboard widgets.
+ TODO ^ might be wrong
 
 ## Features
 
@@ -55,18 +89,44 @@ IS_DEV=false
 2. Ensure your Firebase project has Authentication enabled
 3. The server will automatically fetch public keys from Firebase for JWT verification
 
-## Development
+## Local Development
 
-### Option 1: Docker Compose (Recommended)
-
-1. Clone this repository to your Umbrel device
-2. Navigate to the `umbrel` directory
-3. Create the `.env` file with your configuration
-4. Run the deployment:
+### Option 1: Docker Development
 
 ```bash
-cd umbrel
-docker compose -f docker-compose.prod.yml up -d
+cd titanic
+cp env.example .env
+# Edit .env with your Firebase Project ID and set IS_DEV=true
+
+# Build and run with hot reloading
+docker build -f Dockerfile.dev -t titanic-dev .
+docker run -d \
+  --name titanic-dev \
+  -p 3029:3029 \
+  -v $(pwd)/src:/app/src \
+  -v $(pwd)/Cargo.toml:/app/Cargo.toml \
+  -v $(pwd)/Cargo.lock:/app/Cargo.lock \
+  -v $(pwd)/media:/data/media \
+  --env-file .env \
+  titanic-dev
+```
+
+### Option 2: Local Rust Development
+
+```bash
+cd titanic
+cp env.example .env
+# Edit .env with your configuration
+cargo run
+```
+
+### Option 3: Using Root Docker Compose
+
+For development with the entire Titanic stack:
+
+```bash
+cd ../  # Go to project root
+docker compose -f docker-compose.dev.yml up -d
 ```
 
 ## API Endpoints
@@ -136,7 +196,11 @@ The container includes health checks that can be monitored by Docker or external
 
 View logs with:
 ```bash
-docker compose -f docker-compose.prod.yml logs -f titanic-umbrel
+# For Umbrel deployment
+docker logs titanic_app_1
+
+# For local development
+docker logs titanic-dev
 ```
 
 ### Manual Testing

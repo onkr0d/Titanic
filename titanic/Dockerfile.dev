@@ -1,22 +1,29 @@
-# Dockerfile for local development with hot-reloading
-FROM rust:1.88-alpine
+# Development stage with cargo-watch for hot reloading
+FROM rust:1.82-alpine
 
-# Install build dependencies and hot-reload tool
-RUN apk add --no-cache musl-dev pkgconfig openssl-dev openssl-libs-static perl make
-RUN cargo install cargo-watch
+# Install required packages for building and development
+RUN apk add --no-cache \
+    musl-dev \
+    openssl-dev \
+    pkgconfig \
+    cargo-watch \
+    perl \
+    make
 
+# Create app directory
 WORKDIR /app
 
-# Create a dummy project to cache dependencies
-RUN cargo init --vcs none .
+# Copy manifest files
+COPY Cargo.toml Cargo.lock ./
 
-# Copy dependencies
-COPY Cargo.toml Cargo.lock* ./
+# Copy source code
+COPY src ./src
 
-# Build dependencies to cache them
-RUN cargo build
+# Create data directory
+RUN mkdir -p /data/media
 
-# This command will run when the container starts.
-# It watches for changes in the `src` directory (mounted as a volume)
-# and automatically recompiles and reruns the application.
-CMD ["sh", "-c", "cargo clean && cargo watch -q -c -w src/ -x run"] 
+# Expose port
+EXPOSE 3029
+
+# Use cargo-watch for hot reloading during development
+CMD ["cargo", "watch", "-x", "run"]

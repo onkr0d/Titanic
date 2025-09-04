@@ -63,14 +63,16 @@ firebase emulators:start
 ### Backend (`backend/`)
 The backend is designed to be deployed as a Docker container. See `backend/docker-compose.run.yml` for an example of how to run the pre-built image from `ghcr.io`.
 
-### Umbrel Component (`umbrel/`)
-The Umbrel component is intended to be run directly on your Umbrel device.
+### Umbrel Component (`titanic/`)
+The Umbrel component is deployed as a native Umbrel app:
    ```bash
-   cd umbrel
-   cp env.example .env
-   # Edit .env with your Firebase Project ID and set IS_DEV=false
-   ./deploy.sh
+   # On your Umbrel device
+   cd /home/umbrel/umbrel/app-stores/getumbrel-umbrel-apps-github-53f74447
+   git clone https://github.com/onkr0d/Titanic.git titanic
+   cd titanic
+   umbreld client apps.install.mutate --appId titanic
    ```
+   Then configure the Firebase Project ID through the Umbrel dashboard.
 
 ## File Flow
 

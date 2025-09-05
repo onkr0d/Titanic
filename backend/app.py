@@ -52,8 +52,8 @@ app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024 * 1024  # 10GB max file size
 os.makedirs(UNCOMPRESSED_FOLDER, exist_ok=True)
 os.makedirs(COMPRESSED_FOLDER, exist_ok=True)
 
-ffmpeg_queue = Queue('ffmpeg', connection=Redis())
-umbrel_queue = Queue('umbrel', connection=Redis())
+ffmpeg_queue = Queue('ffmpeg', connection=Redis(), default_timeout=3600)
+umbrel_queue = Queue('umbrel', connection=Redis(), default_timeout=3600)
 
 # TODO: set Firebase hosting IP to be static, so I can whitelist it in the backend??? 🤔
 def verify_firebase_token(f):
@@ -164,12 +164,12 @@ def upload_video():
                     'X-Firebase-AppCheck': request.headers.get('X-Firebase-AppCheck')
                 }
                 if should_compress:
-                    ffmpeg_job = ffmpeg_queue.enqueue(compress_video, args=[filepath], timeout=3600)
+                    ffmpeg_job = ffmpeg_queue.enqueue(compress_video, args=[filepath])
                     # give the umbrel job the auth headers so the umbrel server can verify them
-                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, depends_on=ffmpeg_job, meta=headers, timeout=3600)
+                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, depends_on=ffmpeg_job, meta=headers)
                 else:
                     # If compression is disabled, just upload the original file
-                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, args=[filepath], meta=headers, timeout=3600)
+                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, args=[filepath], meta=headers)
                 
                 return jsonify({
                     'message': 'File uploaded successfully',

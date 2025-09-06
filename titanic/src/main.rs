@@ -223,7 +223,7 @@ async fn space_check(
 }
 
 fn is_valid_video_file(filename: &str) -> bool {
-    let valid_extensions = ["mp4", "avi", "mov", "mkv", "wmv", "flv"];
+    let valid_extensions = ["mp4", "avi", "mov", "mkv", "wmv", "flv", "m4v", "avi", "webm", "ts"];
 
     if let Some(extension) = filename.split('.').last() {
         valid_extensions.contains(&extension.to_lowercase().as_str())

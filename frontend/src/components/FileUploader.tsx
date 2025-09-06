@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { UploadCloud, X, FileText, Check, Sparkles } from 'lucide-react';
+import { UploadCloud, X, Check, Clapperboard } from 'lucide-react';
 import { showToast } from '../utils/toast';
 import { uploadVideo } from '../utils/api';
 import Tooltip from './Tooltip';
+import { Switch } from './animate-ui/base/switch';
 
 interface FileState {
     file: File;
@@ -69,7 +70,7 @@ const FileUploader = () => {
     }
 
     const toggleCompression = (fileId: string) => {
-        setFiles(prev => prev.map(f => 
+        setFiles(prev => prev.map(f =>
             f.id === fileId ? { ...f, shouldCompress: !f.shouldCompress } : f
         ));
     };
@@ -123,11 +124,10 @@ const FileUploader = () => {
     return (
         <div className="w-full max-w-xl mx-auto p-6">
             <div
-                className={`border-2 border-dashed rounded-lg p-8 ${
-                    isDragging 
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                        : 'border-gray-300 dark:border-gray-700'
-                }`}
+                className={`border-2 border-dashed rounded-lg p-8 ${isDragging
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                    : 'border-gray-300 dark:border-gray-700'
+                    }`}
                 onDragEnter={handleDragEnter}
                 onDragOver={handleDragEnter}
                 onDragLeave={handleDragLeave}
@@ -163,7 +163,7 @@ const FileUploader = () => {
                                 className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
                             >
                                 <div className="flex items-center space-x-3 flex-grow">
-                                    <FileText className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                                    <Clapperboard className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                                     <div className="flex flex-col flex-grow">
                                         <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{file.name}</span>
                                         {error && (
@@ -185,35 +185,30 @@ const FileUploader = () => {
                                     ) : status === 'uploading' ? (
                                         <div className="w-5 h-5 border-2 border-t-blue-500 rounded-full animate-spin" />
                                     ) : (
-                                        <>
-                                            <Tooltip content={shouldCompress 
-                                                ? "Compression enabled - video will be compressed before it appears in Plex"
-                                                : "Compression disabled - video will appear in Plex as is"
-                                            }>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        toggleCompression(id);
-                                                    }}
-                                                    className={`p-1.5 rounded transition-colors ${
-                                                        shouldCompress 
-                                                            ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400' 
-                                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                                                    }`}
-                                                >
-                                                    <Sparkles className="w-4 h-4" />
-                                                </button>
+                                        <div className="flex">
+                                            <Tooltip
+                                                content={
+                                                    shouldCompress
+                                                        ? "Smart compression enabled"
+                                                        : "Compression disabled: clip will appear in Plex as is"
+                                                }
+                                            >
+                                                <Switch
+                                                    checked={shouldCompress}
+                                                    onCheckedChange={() => toggleCompression(id)}
+                                                    className="data-[checked]:bg-green-500 data-[unchecked]:bg-gray-300 dark:data-[unchecked]:bg-gray-600 self-center my-1 scale-75"
+                                                />
                                             </Tooltip>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     removeFile(id);
                                                 }}
-                                                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                                                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded my-auto"
                                             >
                                                 <X className="w-4 h-4 text-gray-500" />
                                             </button>
-                                        </>
+                                        </div>
                                     )}
                                 </div>
                             </div>

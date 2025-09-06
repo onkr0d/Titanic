@@ -50,7 +50,7 @@ firebase_admin.initialize_app(cred)
 UPLOAD_FOLDER = os.path.abspath('videos')  # Base directory for videos
 UNCOMPRESSED_FOLDER = os.path.join(UPLOAD_FOLDER, 'uncompressed')
 COMPRESSED_FOLDER = os.path.join(UPLOAD_FOLDER, 'compressed')
-ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv'}
+ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv', 'm4v', 'avi', 'webm', 'ts'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['UNCOMPRESSED_FOLDER'] = UNCOMPRESSED_FOLDER
 app.config['COMPRESSED_FOLDER'] = COMPRESSED_FOLDER

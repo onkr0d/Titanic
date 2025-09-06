@@ -1,25 +1,26 @@
 # Titanic
 
-Sink files to an Umbrel + Plex media server
+Sync files to an Umbrel + Plex media server
 
 ## Overview
 
-Titanic is a complete video upload and compression system that allows users to upload videos through a web interface, compress them on a backend server, and automatically upload them to an Umbrel device running Plex.
+Titanic is a complete video upload and compression system that allows users to upload videos through a webbsite, and see the compressed videos on their Plex + Umbrel.
 
 ## Architecture
 
 - **Frontend**: React + Vite web app hosted on Firebase
-- **Backend**: Flask API running on Oracle Cloud that handles video compression
-- **Umbrel Component**: Rust server running on your Umbrel device that receives compressed videos
+- **Backend**: Flask server running on Oracle Cloud that handles video compression
+- **Umbrel App**: Rust server running on your Umbrel device that receives compressed videos
 
 ## Getting Started (Local Development)
 
-This project includes a unified Docker Compose setup to run the entire backend (Flask API) and the Umbrel component with a single command, featuring hot-reloading for the Rust service.
+This project includes a unified Docker Compose setup to run the entire backend and the Umbrel app with a single command, featuring hot-reloading for the Rust service.
 
 ### Prerequisites
 - Docker and Docker Compose
 - A Firebase project
-- A Firebase service account key file named `admin-sdk-cred.json` placed in the `backend/` directory.
+- A Firebase service account key file named `admin-sdk-cred.json` placed in the `backend/` directory
+- .env's: wherever you see an .env.example, replace it with your values
 
 ### Setup
 

@@ -41,9 +41,16 @@ COPY --from=builder /app/hypercorn.toml .
 COPY --from=builder /app/start.sh .
 COPY --from=builder /app/jobs/ jobs/
 
+# Copy Redis configuration
+COPY redis.conf .
+
 # Create a non-root user
 RUN addgroup -g 1000 -S flask && \
     adduser -u 1000 -S flask -G flask
+
+# Create Redis data directory with proper permissions
+RUN mkdir -p /app/redis-data && \
+    chown -R flask:flask /app/redis-data
 
 # Note: Don't create videos directories here - they're created at runtime
 # and the volume mount will override any directories created during build

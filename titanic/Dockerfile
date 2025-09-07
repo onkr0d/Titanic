@@ -12,13 +12,22 @@ RUN apk add --no-cache \
 # Create app directory
 WORKDIR /app
 
-# Copy manifest files
+# Copy manifest files first (for better caching)
 COPY Cargo.toml Cargo.lock ./
 
-# Copy source code
+# Create a dummy main.rs to build dependencies (this gets cached)
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+
+# Build dependencies only (cached if Cargo.toml/Cargo.lock don't change)
+RUN cargo build --release
+
+# Remove dummy source and binary to force rebuild
+RUN rm -rf src target/release/deps/titanic* target/release/titanic
+
+# Copy actual source code
 COPY src ./src
 
-# Build the application in release mode
+# Build the actual application
 RUN cargo build --release
 
 # Runtime stage

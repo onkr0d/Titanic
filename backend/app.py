@@ -57,8 +57,18 @@ app.config['COMPRESSED_FOLDER'] = COMPRESSED_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024 * 1024  # 10GB max file size
 
 # Ensure upload directories exist
-os.makedirs(UNCOMPRESSED_FOLDER, exist_ok=True)
-os.makedirs(COMPRESSED_FOLDER, exist_ok=True)
+try:
+    os.makedirs(UNCOMPRESSED_FOLDER, exist_ok=True)
+    os.makedirs(COMPRESSED_FOLDER, exist_ok=True)
+except PermissionError as e:
+    logger.warning(f"Could not create upload directories: {e}. They may already exist with correct permissions.")
+    # Check if directories exist and are writable
+    if not os.path.exists(UNCOMPRESSED_FOLDER) or not os.access(UNCOMPRESSED_FOLDER, os.W_OK):
+        logger.error(f"Upload directory {UNCOMPRESSED_FOLDER} is not accessible")
+        raise
+    if not os.path.exists(COMPRESSED_FOLDER) or not os.access(COMPRESSED_FOLDER, os.W_OK):
+        logger.error(f"Compressed directory {COMPRESSED_FOLDER} is not accessible")
+        raise
 
 ffmpeg_queue = Queue('ffmpeg', connection=Redis(), default_timeout=3600)
 umbrel_queue = Queue('umbrel', connection=Redis(), default_timeout=3600)

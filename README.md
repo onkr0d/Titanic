@@ -69,7 +69,16 @@ Now you can use the entire Titanic suit on your local machine.
 ## Production Deployment
 
 ### Backend (`backend/`)
-The backend is designed to be deployed as a Docker container. See `backend/docker-compose.run.yml` for an example of how to run the pre-built image from `ghcr.io`. Don't forget the admin sdk!
+The backend is designed to be deployed as a Docker container. See `backend/docker-compose.run.yml` for an example of how to run the pre-built image from `ghcr.io`.
+
+**Important:** The backend runs as a non-root user for security. Set the correct user ID to match your host user for volume permissions:
+```bash
+export UID=$(id -u)
+export GID=$(id -g)
+docker compose -f backend/docker-compose.run.yml up -d
+```
+
+Don't forget the admin SDK credentials file!
 
 ### Umbrel Component (`titanic/`)
 The Umbrel component is deployed as a native Umbrel app:

@@ -22,7 +22,7 @@ services:
       - PYTHONUNBUFFERED=1
       - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/admin-sdk-cred
       - IS_DEV=${IS_DEV:-true}
-      - UMBREL_SERVER_URL=http://umbrel:3029/api/upload
+      - UMBREL_SERVER_URL=http://umbrel:3029
     secrets:
       - admin-sdk-cred
     networks:

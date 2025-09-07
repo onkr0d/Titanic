@@ -7,7 +7,7 @@ services:
       - ./videos:/app/videos
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/admin-sdk-cred
-      - UMBREL_SERVER_URL=http://100.97.35.4:3029/api/upload
+      - UMBREL_SERVER_URL=http://100.97.35.4:3029 # tailsale ip
     secrets:
       - admin-sdk-cred
     healthcheck:

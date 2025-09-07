@@ -194,7 +194,7 @@ def upload_video_to_umbrel(input_file=None):
         raise FileNotFoundError(f"File not found: {compressed_file}")
     
     # Get Umbrel server URL from environment
-    umbrel_url = os.environ.get('UMBREL_SERVER_URL', 'http://umbrel:3029/api/upload')
+    umbrel_url = os.environ.get('UMBREL_SERVER_URL', 'http://100.97.35.4:3029') # tailsale ip
 
     # Upload to Umbrel server with automatic retry on failure
     logger.debug(f"Uploading video to Umbrel: {compressed_file}")
@@ -214,7 +214,9 @@ def upload_video_to_umbrel(input_file=None):
             logger.debug("No folder found in job headers")
 
         logger.debug(f"Uploading with headers: {auth_headers}")
-        response = requests.post(umbrel_url, files=files, headers=auth_headers, timeout=300)
+
+        upload_umbrel_url = umbrel_url + '/api/upload'
+        response = requests.post(upload_umbrel_url, files=files, headers=auth_headers, timeout=300)
         response.raise_for_status()
 
         response_data = response.json()

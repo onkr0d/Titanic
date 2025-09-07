@@ -46,12 +46,12 @@ impl VideoUploader {
         // Always use the Clips directory structure
         let clips_dir = self.plex_media_path.join("Clips");
 
-        // Determine the target path - either in a subfolder or directly in Clips
-        let target_path = if let Some(folder_name) = folder {
+        // Determine the target directory and generate unique filename
+        let (target_dir, folder_info) = if let Some(folder_name) = folder {
             // Handle "Clips" as special case - save directly to Clips directory
             if folder_name == "Clips" {
                 info!("Saving to Clips directory (default)");
-                clips_dir.join(&sanitized_filename)
+                (clips_dir.clone(), "Clips directory".to_string())
             } else {
                 // Sanitize folder name as well
                 let sanitized_folder = sanitize_filename::sanitize(folder_name);
@@ -63,13 +63,21 @@ impl VideoUploader {
                     AppError::InternalError(format!("Failed to create folder '{}': {}", sanitized_folder, e))
                 })?;
 
-                folder_dir.join(&sanitized_filename)
+                (folder_dir, format!("folder '{}'", sanitized_folder))
             }
         } else {
             // Fallback: save directly to Clips directory (no subfolder)
             info!("No folder specified, saving to Clips directory");
-            clips_dir.join(&sanitized_filename)
+            (clips_dir.clone(), "Clips directory".to_string())
         };
+
+        // Generate unique filename to prevent overwriting
+        let unique_filename = self.generate_unique_filename(&target_dir, &sanitized_filename);
+        let target_path = target_dir.join(&unique_filename);
+
+        if unique_filename != sanitized_filename {
+            info!("Generated unique filename: {} (original was {})", unique_filename, sanitized_filename);
+        }
 
         info!("Target path determined: {:?}", target_path);
         info!("Moving file from {:?} to: {:?}", temp_path, target_path);
@@ -85,6 +93,39 @@ impl VideoUploader {
 
 
         Ok(target_path.to_string_lossy().to_string())
+    }
+
+    // Generate a unique filename by appending counter if file already exists
+    fn generate_unique_filename(&self, directory: &Path, filename: &str) -> String {
+        let path = directory.join(filename);
+
+        if !path.exists() {
+            return filename.to_string();
+        }
+
+        // Split filename into base and extension
+        let (base, ext) = if let Some(dot_pos) = filename.rfind('.') {
+            let (base_part, ext_part) = filename.split_at(dot_pos);
+            (base_part, &filename[dot_pos..])
+        } else {
+            (filename, "")
+        };
+
+        // Try appending counter until we find a unique filename
+        let mut counter = 1;
+        loop {
+            let new_filename = if ext.is_empty() {
+                format!("{}_{}", base, counter)
+            } else {
+                format!("{}_{}{}", base, counter, ext)
+            };
+
+            let new_path = directory.join(&new_filename);
+            if !new_path.exists() {
+                return new_filename;
+            }
+            counter += 1;
+        }
     }
 
     pub async fn get_space_info(&self) -> Result<SpaceInfo, AppError> {

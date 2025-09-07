@@ -219,7 +219,7 @@ async fn upload_video(
     }
 
     // Upload to Plex media directory by moving the temp file
-    info!("About to upload video: filename={}, folder={:?}", filename, folder);
+    info!("About to save video: filename={}, folder={:?}", filename, folder);
     let plex_path = state.uploader.upload_video(&filename, &temp_file_path, folder.as_deref()).await?;
     info!("Upload completed, saved to: {}", plex_path);
 

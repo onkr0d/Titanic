@@ -1,10 +1,10 @@
-frontend/functions/.env
-/frontend/.firebase
 backend/admin-sdk-cred.json
-backend/.env
-frontend/.env
-*.MOV
 backend/dump.rdb
 .env
-**/.env
+
+# umbrel icons
 *.png
+# videos
+*.MP4
+*.M4v
+*.MOV

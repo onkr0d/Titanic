@@ -1,8 +1,6 @@
-version: '3.7'
-
 services:
   app:
-    image: ghcr.io/onkr0d/titanic/titanic:latest@sha256:68fdad18a57457e72ff64b0a2f7e3c44fa459e9537cd9352d3a68072ca0259b7
+    image: ghcr.io/onkr0d/titanic/titanic:latest@sha256:8fe659cca3c70c102ac60e2a1d4b98bb47d8fab9484e5a2e1b9967364923d30e
     user: "0:0"
     restart: unless-stopped
     ports:
@@ -11,7 +9,7 @@ services:
       - RUST_LOG=info
       - IS_DEV=false
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-titanic-uploader}
-      - PLEX_MEDIA_PATH=/downloads
+      - PLEX_MEDIA_PATH=${PLEX_MEDIA_PATH:-/downloads}
     volumes:
       - ${APP_DATA_DIR}/data:/data
       - ${UMBREL_ROOT}/home/Downloads:/downloads

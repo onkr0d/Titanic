@@ -5,6 +5,8 @@ import rq
 import os
 import json
 import subprocess
+import random
+import functools
 
 # This configures logging for any process that imports this module.
 # It's safe to call here because logging.basicConfig() does nothing
@@ -110,6 +112,67 @@ def compress_video(input_file: str) -> str:
 import requests
 import os
 
+def retry_with_exponential_backoff(
+    max_retries=5,
+    base_delay=1.0,
+    max_delay=60.0,
+    backoff_factor=2.0,
+    jitter=True
+):
+    """
+    Decorator that implements exponential backoff retry logic.
+
+    Args:
+        max_retries: Maximum number of retry attempts
+        base_delay: Initial delay in seconds
+        max_delay: Maximum delay between retries
+        backoff_factor: Factor by which delay increases each retry
+        jitter: Whether to add random jitter to delay
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except (requests.exceptions.ConnectionError,
+                        requests.exceptions.Timeout,
+                        requests.exceptions.RequestException) as e:
+                    last_exception = e
+
+                    # Check if this is a server error (5xx) that should be retried
+                    if hasattr(e, 'response') and e.response is not None:
+                        if 500 <= e.response.status_code < 600:
+                            should_retry = True
+                        else:
+                            # Don't retry client errors (4xx)
+                            logger.error(f"Client error, not retrying: {e.response.status_code}")
+                            raise e
+                    else:
+                        should_retry = True
+
+                    if attempt == max_retries or not should_retry:
+                        logger.error(f"Final attempt failed after {max_retries} retries: {str(e)}")
+                        raise e
+
+                    # Calculate delay with exponential backoff
+                    delay = min(base_delay * (backoff_factor ** attempt), max_delay)
+
+                    # Add jitter to avoid thundering herd
+                    if jitter:
+                        delay = delay * (0.5 + random.random() * 0.5)
+
+                    logger.warning(f"Attempt {attempt + 1}/{max_retries + 1} failed: {str(e)}. Retrying in {delay:.2f}s")
+                    time.sleep(delay)
+
+            # This should never be reached, but just in case
+            raise last_exception
+        return wrapper
+    return decorator
+
+@retry_with_exponential_backoff(max_retries=5, base_delay=1.0, max_delay=30.0)
 def upload_video_to_umbrel(input_file=None):
     job = rq.get_current_job()
     
@@ -133,28 +196,21 @@ def upload_video_to_umbrel(input_file=None):
     # Get Umbrel server URL from environment
     umbrel_url = os.environ.get('UMBREL_SERVER_URL', 'http://umbrel:3029/api/upload')
 
-    try:
-        # Upload to Umbrel server
-        logger.debug(f"Uploading video to Umbrel: {compressed_file}")
-        
-        with open(compressed_file, 'rb') as f:
-            files = {'file': (os.path.basename(compressed_file), f, 'video/mp4')}
-            
-            auth_headers = job.meta
-            logger.debug(f"Uploading with headers: {auth_headers}")
-            response = requests.post(umbrel_url, files=files, headers=auth_headers, timeout=300)
-            response.raise_for_status()
-            
-            response_data = response.json()
-            logger.debug(f"Umbrel upload response: {response_data}")
-        
-        logger.debug(f"Successfully uploaded video to Umbrel: {compressed_file}")
-        os.remove(compressed_file)
-        logger.debug(f"Removed compressed file: {compressed_file}")    
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Network error uploading to Umbrel: {str(e)}")
-        raise
-    except Exception as e:
-        logger.error(f"Error uploading to Umbrel: {str(e)}")
-        raise
+    # Upload to Umbrel server with automatic retry on failure
+    logger.debug(f"Uploading video to Umbrel: {compressed_file}")
+
+    with open(compressed_file, 'rb') as f:
+        files = {'file': (os.path.basename(compressed_file), f, 'video/mp4')}
+
+        auth_headers = job.meta
+        logger.debug(f"Uploading with headers: {auth_headers}")
+        response = requests.post(umbrel_url, files=files, headers=auth_headers, timeout=300)
+        response.raise_for_status()
+
+        response_data = response.json()
+        logger.debug(f"Umbrel upload response: {response_data}")
+
+    logger.debug(f"Successfully uploaded video to Umbrel: {compressed_file}")
+    os.remove(compressed_file)
+    logger.debug(f"Removed compressed file: {compressed_file}")
     

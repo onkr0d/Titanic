@@ -17,8 +17,7 @@ impl VideoUploader {
         if !path.exists() {
             std_fs::create_dir_all(&path).map_err(|e| {
                 AppError::ConfigError(format!(
-                    "Failed to create media directory '{}': {}",
-                    plex_media_path, e
+                    "Failed to create media directory '{plex_media_path}': {e}"
                 ))
             })?;
         }
@@ -26,8 +25,7 @@ impl VideoUploader {
         // Check if path is a directory
         if !path.is_dir() {
             return Err(AppError::ConfigError(format!(
-                "Media path '{}' is not a directory",
-                plex_media_path
+                "Media path '{plex_media_path}' is not a directory"
             )));
         }
 
@@ -47,7 +45,7 @@ impl VideoUploader {
         let clips_dir = self.plex_media_path.join("Clips");
 
         // Determine the target directory and generate unique filename
-        let (target_dir, folder_info) = if let Some(folder_name) = folder {
+        let (target_dir, _folder_info) = if let Some(folder_name) = folder {
             // Handle "Clips" as special case - save directly to Clips directory
             if folder_name == "Clips" {
                 info!("Saving to Clips directory (default)");
@@ -60,10 +58,10 @@ impl VideoUploader {
                 info!("Creating folder directory: {:?}", folder_dir);
                 // Ensure the folder exists
                 std_fs::create_dir_all(&folder_dir).map_err(|e| {
-                    AppError::InternalError(format!("Failed to create folder '{}': {}", sanitized_folder, e))
+                    AppError::InternalError(format!("Failed to create folder '{sanitized_folder}': {e}"))
                 })?;
 
-                (folder_dir, format!("folder '{}'", sanitized_folder))
+                (folder_dir, format!("folder '{sanitized_folder}'"))
             }
         } else {
             // Fallback: save directly to Clips directory (no subfolder)
@@ -85,11 +83,11 @@ impl VideoUploader {
         // Move the file from the temporary path to the final destination
         fs::copy(&temp_path, &target_path)
             .await
-            .map_err(|e| AppError::InternalError(format!("Failed to copy file: {}", e)))?;
+            .map_err(|e| AppError::InternalError(format!("Failed to copy file: {e}")))?;
 
         fs::remove_file(&temp_path)
             .await
-            .map_err(|e| AppError::InternalError(format!("Failed to remove temporary file: {}", e)))?;
+            .map_err(|e| AppError::InternalError(format!("Failed to remove temporary file: {e}")))?;
 
 
         Ok(target_path.to_string_lossy().to_string())
@@ -106,7 +104,7 @@ impl VideoUploader {
         // Split filename into base and extension
         let (base, ext) = if let Some(dot_pos) = filename.rfind('.') {
             let (base_part, ext_part) = filename.split_at(dot_pos);
-            (base_part, &filename[dot_pos..])
+            (base_part, ext_part)
         } else {
             (filename, "")
         };
@@ -115,9 +113,9 @@ impl VideoUploader {
         let mut counter = 1;
         loop {
             let new_filename = if ext.is_empty() {
-                format!("{}_{}", base, counter)
+                format!("{base}_{counter}")
             } else {
-                format!("{}_{}{}", base, counter, ext)
+                format!("{base}_{counter}{ext}")
             };
 
             let new_path = directory.join(&new_filename);
@@ -141,23 +139,23 @@ impl VideoUploader {
 
         // Ensure Clips directory exists
         std_fs::create_dir_all(&clips_dir).map_err(|e| {
-            AppError::InternalError(format!("Failed to create Clips directory: {}", e))
+            AppError::InternalError(format!("Failed to create Clips directory: {e}"))
         })?;
 
         // Read the directory entries
         let mut folders = Vec::new();
         let entries = std_fs::read_dir(&clips_dir).map_err(|e| {
-            AppError::InternalError(format!("Failed to read Clips directory: {}", e))
+            AppError::InternalError(format!("Failed to read Clips directory: {e}"))
         })?;
 
         for entry in entries {
             let entry = entry.map_err(|e| {
-                AppError::InternalError(format!("Failed to read directory entry: {}", e))
+                AppError::InternalError(format!("Failed to read directory entry: {e}"))
             })?;
 
             // Only include directories
             if entry.file_type().map_err(|e| {
-                AppError::InternalError(format!("Failed to get file type: {}", e))
+                AppError::InternalError(format!("Failed to get file type: {e}"))
             })?.is_dir() {
                 if let Some(folder_name) = entry.file_name().to_str() {
                     folders.push(folder_name.to_string());
@@ -182,7 +180,7 @@ mod disk_space {
             .arg(path)
             .output()
             .map_err(|e| {
-                AppError::InternalError(format!("Failed to execute 'df' command: {}", e))
+                AppError::InternalError(format!("Failed to execute 'df' command: {e}"))
             })?;
 
         if !output.status.success() {

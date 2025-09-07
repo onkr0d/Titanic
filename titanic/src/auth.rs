@@ -102,7 +102,7 @@ impl FirebaseAuth {
         // Decode the header to get the key ID
         info!("Decoding token header...");
         let header = jsonwebtoken::decode_header(token)
-            .map_err(|e| AppError::AuthError(format!("Invalid token header: {}", e)))?;
+            .map_err(|e| AppError::AuthError(format!("Invalid token header: {e}")))?;
 
         let kid = header.kid.ok_or_else(|| {
             info!("Auth Error: No key ID in token");
@@ -125,12 +125,12 @@ impl FirebaseAuth {
         let token_data = decode::<JwtPayload>(
             token,
             &DecodingKey::from_rsa_pem(public_key.as_bytes())
-                .map_err(|e| AppError::AuthError(format!("Invalid public key: {}", e)))?,
+                .map_err(|e| AppError::AuthError(format!("Invalid public key: {e}")))?,
             &validation,
         )
         .map_err(|e| {
             info!("Token verification failed: {}", e);
-            AppError::AuthError(format!("Token verification failed: {}", e))
+            AppError::AuthError(format!("Token verification failed: {e}"))
         })?;
         info!("Token decoded and validated successfully.");
 
@@ -173,16 +173,14 @@ impl FirebaseAuth {
     async fn refresh_public_keys(&self) -> Result<(), AppError> {
         // Fetch public keys from Firebase
         info!("Public key not in cache, fetching from Google...");
-        let url = format!(
-            "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
-        );
+        let url = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com".to_string();
 
         let response = self
             .client
             .get(&url)
             .send()
             .await
-            .map_err(|e| AppError::AuthError(format!("Failed to fetch public keys: {}", e)))?;
+            .map_err(|e| AppError::AuthError(format!("Failed to fetch public keys: {e}")))?;
 
         if !response.status().is_success() {
             info!(
@@ -198,11 +196,11 @@ impl FirebaseAuth {
         let keys_text = response
             .text()
             .await
-            .map_err(|e| AppError::AuthError(format!("Failed to read response: {}", e)))?;
+            .map_err(|e| AppError::AuthError(format!("Failed to read response: {e}")))?;
 
         // Parse the keys
         let keys_map: HashMap<String, String> = serde_json::from_str(&keys_text)
-            .map_err(|e| AppError::AuthError(format!("Failed to parse public keys: {}", e)))?;
+            .map_err(|e| AppError::AuthError(format!("Failed to parse public keys: {e}")))?;
 
         // Cache all the keys
         {

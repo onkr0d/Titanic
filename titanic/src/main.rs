@@ -15,7 +15,6 @@ mod config;
 mod error;
 mod upload;
 use axum::extract::multipart::MultipartError;
-use dotenvy;
 
 use tower_http::{
     cors::{Any, CorsLayer},
@@ -58,7 +57,6 @@ struct FoldersResponse {
 }
 
 struct AppState {
-    config: Config,
     auth: FirebaseAuth,
     uploader: VideoUploader,
 }
@@ -101,7 +99,6 @@ async fn main() -> Result<()> {
 
     let bind_addr = config.bind_address.clone();
     let state = Arc::new(AppState {
-        config,
         auth,
         uploader,
     });
@@ -123,8 +120,8 @@ async fn main() -> Result<()> {
         .layer(RequestBodyLimitLayer::new(CONTENT_LENGTH_LIMIT))
         .with_state(state);
 
-    println!("Server starting on {}", bind_addr);
-    info!("Server starting on {}", bind_addr);
+    println!("Server starting on {bind_addr}");
+    info!("Server starting on {bind_addr}");
 
     // Start server
     let listener = TcpListener::bind(&bind_addr).await?;
@@ -163,7 +160,7 @@ async fn upload_video(
     ));
     let mut temp_file = File::create(&temp_file_path)
         .await
-        .map_err(|e| AppError::InternalError(format!("Failed to create temp file: {}", e)))?;
+        .map_err(|e| AppError::InternalError(format!("Failed to create temp file: {e}")))?;
 
     // Extract file and folder from multipart
     let mut filename: Option<String> = None;
@@ -181,7 +178,7 @@ async fn upload_video(
                 let mut field_stream = field;
                 while let Some(chunk) = field_stream.chunk().await? {
                     temp_file.write_all(&chunk).await.map_err(|e| {
-                        AppError::InternalError(format!("Failed to write to temp file: {}", e))
+                        AppError::InternalError(format!("Failed to write to temp file: {e}"))
                     })?;
                 }
                 // Don't break - continue processing other fields
@@ -262,7 +259,7 @@ async fn list_folders(
 fn is_valid_video_file(filename: &str) -> bool {
     let valid_extensions = ["mp4", "avi", "mov", "mkv", "wmv", "flv", "m4v", "avi", "webm", "ts"];
 
-    if let Some(extension) = filename.split('.').last() {
+    if let Some(extension) = filename.split('.').next_back() {
         valid_extensions.contains(&extension.to_lowercase().as_str())
     } else {
         false

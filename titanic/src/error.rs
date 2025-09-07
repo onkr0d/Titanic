@@ -8,6 +8,7 @@ use thiserror::Error;
 use tracing::error;
 
 #[derive(Error, Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum AppError {
     #[error("Authentication error: {0}")]
     AuthError(String),

@@ -19,6 +19,7 @@ const FileUploader = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [files, setFiles] = useState<FileState[]>([]);
     const [availableFolders, setAvailableFolders] = useState<string[]>([]);
+    const [shiftPressed, setShiftPressed] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Fetch available folders on component mount
@@ -28,6 +29,28 @@ const FileUploader = () => {
             setAvailableFolders(folders);
         };
         fetchFolders();
+
+        // Add global keyboard event listeners
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Shift') {
+                setShiftPressed(true);
+            }
+        };
+
+        const handleKeyUp = (e: KeyboardEvent) => {
+            if (e.key === 'Shift') {
+                setShiftPressed(false);
+            }
+        };
+
+        // Try document instead of window for better event capturing
+        document.addEventListener('keydown', handleKeyDown, true); // useCapture = true
+        document.addEventListener('keyup', handleKeyUp, true);
+
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown, true);
+            document.removeEventListener('keyup', handleKeyUp, true);
+        };
     }, []);
 
     const isValidVideoFile = (file: File) => {
@@ -87,10 +110,20 @@ const FileUploader = () => {
         ));
     };
 
-    const setFileFolder = (fileId: string, folder: string) => {
-        setFiles(prev => prev.map(f =>
-            f.id === fileId ? { ...f, folder: folder || "Clips" } : f
-        ));
+    const setFileFolder = (fileId: string, folder: string, applyToAll: boolean = false) => {
+        const finalApplyToAll = applyToAll || shiftPressed;
+
+        if (finalApplyToAll) {
+            // Apply to all files that are not yet uploaded
+            setFiles(prev => prev.map(f =>
+                f.status === 'ready' ? { ...f, folder: folder || "Clips" } : f
+            ));
+        } else {
+            // Apply to just this file
+            setFiles(prev => prev.map(f =>
+                f.id === fileId ? { ...f, folder: folder || "Clips" } : f
+            ));
+        }
     };
 
     const uploadFiles = async () => {
@@ -216,10 +249,12 @@ const FileUploader = () => {
                                         <div className="w-5 h-5 border-2 border-t-blue-500 rounded-full animate-spin" />
                                     ) : (
                                         <div className="flex items-center space-x-1">
-                                            <Tooltip content="Select destination folder">
+                                            <Tooltip content="Select destination folder (hold Shift to apply to all files)">
                                                 <select
                                                     value={folder || "Clips"}
-                                                    onChange={(e) => setFileFolder(id, e.target.value)}
+                                                    onChange={(e) => {
+                                                        setFileFolder(id, e.target.value);
+                                                    }}
                                                     className="text-xs bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                     onClick={(e) => e.stopPropagation()}
                                                 >

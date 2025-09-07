@@ -41,22 +41,14 @@ COPY --from=builder /app/hypercorn.toml .
 COPY --from=builder /app/start.sh .
 COPY --from=builder /app/jobs/ jobs/
 
-# Create a non-root user
-RUN addgroup -g 1000 -S flask && \
-    adduser -u 1000 -S flask -G flask
-
 # Create uploads directory
-RUN mkdir -p videos/uncompressed videos/compressed && \
-    chown -R flask:flask videos
+RUN mkdir -p videos/uncompressed videos/compressed
 
 # Ensure startup script is executable
 RUN chmod u+x start.sh
 
 # Add pip-installed binaries to PATH
 ENV PATH=/usr/local/bin:$PATH
-
-# Switch to non-root user
-USER flask
 
 # Expose ports
 EXPOSE 5000 6379

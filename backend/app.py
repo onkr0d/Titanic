@@ -1,4 +1,6 @@
 import asyncio
+
+import requests
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
 from flask import Flask, request, jsonify
@@ -146,7 +148,9 @@ def upload_video():
         
         file = request.files['file']
         should_compress = request.form.get('shouldCompress', 'true').lower() == 'true'
-        logger.debug(f"Received file: {file.filename}, compression: {should_compress}")
+        folder = request.form.get('folder', '').strip()  # Get folder parameter, default to empty
+        folder = folder if folder else None  # Convert empty string to None
+        logger.debug(f"Received file: {file.filename}, compression: {should_compress}, folder: {folder}")
         
         if file.filename == '':
             logger.error("Empty filename")
@@ -181,6 +185,14 @@ def upload_video():
                     'Authorization': request.headers.get('Authorization'),
                     'X-Firebase-AppCheck': request.headers.get('X-Firebase-AppCheck')
                 }
+
+                # Include folder information in the headers for the Umbrel job
+                if folder:
+                    headers['X-Folder'] = folder
+                    logger.debug(f"Including folder in upload: {folder}")
+                else:
+                    logger.debug("No folder specified for upload")
+
                 if should_compress:
                     ffmpeg_job = ffmpeg_queue.enqueue(compress_video, args=[filepath])
                     # give the umbrel job the auth headers so the umbrel server can verify them
@@ -214,6 +226,41 @@ def space():
     # check how much disk space is left
     total, used, free = shutil.disk_usage(UPLOAD_FOLDER)
     return jsonify({"total": total, "used": used, "free": free}), 200
+
+@app.route('/api/folders')
+@verify_firebase_token
+def get_folders():
+    """Get available folders from Umbrel server"""
+    try:
+        logger.debug("Fetching folders from Umbrel server")
+        # Build folders URL from base server URL
+
+
+        # chat are we stupid why are we getting a base url and then replacing it with the folders url?
+        umbrel_base_url = os.environ.get('UMBREL_SERVER_URL', 'http://umbrel:3029/api/upload')
+        # Replace /api/upload with /api/folders
+        umbrel_url = umbrel_base_url.replace('/api/upload', '/api/folders')
+
+        # Forward the authorization headers
+        headers = {
+            'Authorization': request.headers.get('Authorization'),
+            'X-Firebase-AppCheck': request.headers.get('X-Firebase-AppCheck')
+        }
+
+        response = requests.get(umbrel_url, headers=headers, timeout=30)
+        response.raise_for_status()
+
+        folders_data = response.json()
+        logger.debug(f"Retrieved folders: {folders_data}")
+
+        return jsonify(folders_data), 200
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching folders from Umbrel: {str(e)}")
+        return jsonify({'error': f'Failed to fetch folders: {str(e)}'}), 500
+    except Exception as e:
+        logger.error(f"Unexpected error fetching folders: {str(e)}")
+        return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
 
 @app.route('/health')
 def docker_health_check():

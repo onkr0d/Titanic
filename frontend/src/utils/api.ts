@@ -21,6 +21,10 @@ export interface DiskSpaceInfo {
     free: number;
 }
 
+export interface FoldersResponse {
+    folders: string[];
+}
+
 export interface UploadProgress {
     progress: number;
     loaded: number;
@@ -73,14 +77,37 @@ export const getDiskSpace = async (): Promise<DiskSpaceInfo | null> => {
     }
 };
 
+export const getFolders = async (): Promise<string[]> => {
+    try {
+        const headers = await authHeaders();
+        const response = await fetch(`${API_BASE_URL}/folders`, {
+            headers
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch folders');
+        }
+
+        const data: FoldersResponse = await response.json();
+        return data.folders;
+    } catch (error) {
+        console.error('Error fetching folders:', error);
+        return [];
+    }
+};
+
 export const uploadVideo = async (
-    file: File, 
+    file: File,
     shouldCompress: boolean = true,
+    folder?: string,
     onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadResponse> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('shouldCompress', shouldCompress.toString());
+    if (folder) {
+        formData.append('folder', folder);
+    }
 
     try {
         const headers = await authHeaders();

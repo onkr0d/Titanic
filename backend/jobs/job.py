@@ -202,7 +202,17 @@ def upload_video_to_umbrel(input_file=None):
     with open(compressed_file, 'rb') as f:
         files = {'file': (os.path.basename(compressed_file), f, 'video/mp4')}
 
-        auth_headers = job.meta
+        # Extract folder from headers if present
+        auth_headers = job.meta.copy()
+        folder = auth_headers.pop('X-Folder', None)  # Remove from headers, get value
+        logger.debug(f"Job meta headers: {job.meta}")
+        logger.debug(f"Extracted folder from headers: {folder}")
+        if folder:
+            files['folder'] = (None, folder)  # Add folder as form field
+            logger.debug(f"Uploading to folder: {folder}")
+        else:
+            logger.debug("No folder found in job headers")
+
         logger.debug(f"Uploading with headers: {auth_headers}")
         response = requests.post(umbrel_url, files=files, headers=auth_headers, timeout=300)
         response.raise_for_status()

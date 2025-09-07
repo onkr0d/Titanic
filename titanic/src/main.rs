@@ -42,6 +42,7 @@ struct UploadResponse {
     message: String,
     filename: String,
     plex_path: String,
+    folder: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -49,6 +50,11 @@ struct SpaceResponse {
     total: u64,
     used: u64,
     free: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FoldersResponse {
+    folders: Vec<String>,
 }
 
 struct AppState {
@@ -111,6 +117,7 @@ async fn main() -> Result<()> {
         .route("/health", get(health_check))
         .route("/api/upload", post(upload_video))
         .route("/api/space", get(space_check))
+        .route("/api/folders", get(list_folders))
         .layer(cors)
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(CONTENT_LENGTH_LIMIT))
@@ -158,22 +165,37 @@ async fn upload_video(
         .await
         .map_err(|e| AppError::InternalError(format!("Failed to create temp file: {}", e)))?;
 
-    // Extract file from multipart and stream to temp file
+    // Extract file and folder from multipart
     let mut filename: Option<String> = None;
+    let mut folder: Option<String> = None;
     let mut field_found = false;
 
-    while let Some(field) = multipart.next_field().await? {
-        if field.name() == Some("file") {
-            filename = field.file_name().map(|f| f.to_owned());
-            field_found = true;
+    info!("Starting multipart processing");
 
-            let mut field_stream = field;
-            while let Some(chunk) = field_stream.chunk().await? {
-                temp_file.write_all(&chunk).await.map_err(|e| {
-                    AppError::InternalError(format!("Failed to write to temp file: {}", e))
-                })?;
+    while let Some(field) = multipart.next_field().await? {
+        match field.name() {
+            Some("file") => {
+                filename = field.file_name().map(|f| f.to_owned());
+                field_found = true;
+
+                let mut field_stream = field;
+                while let Some(chunk) = field_stream.chunk().await? {
+                    temp_file.write_all(&chunk).await.map_err(|e| {
+                        AppError::InternalError(format!("Failed to write to temp file: {}", e))
+                    })?;
+                }
+                // Don't break - continue processing other fields
             }
-            break; // Assuming one file field
+            Some("folder") => {
+                if let Ok(text) = field.text().await {
+                    folder = if text.trim().is_empty() { None } else { Some(text.trim().to_string()) };
+                    info!("Received folder parameter: {:?}", folder);
+                }
+            }
+            Some(other) => {
+                info!("Received other field: {}", other);
+            }
+            _ => {} // Ignore other fields
         }
     }
 
@@ -197,7 +219,9 @@ async fn upload_video(
     }
 
     // Upload to Plex media directory by moving the temp file
-    let plex_path = state.uploader.upload_video(&filename, &temp_file_path).await?;
+    info!("About to upload video: filename={}, folder={:?}", filename, folder);
+    let plex_path = state.uploader.upload_video(&filename, &temp_file_path, folder.as_deref()).await?;
+    info!("Upload completed, saved to: {}", plex_path);
 
     // The temp file is moved by upload_video, so no need to delete it here.
 
@@ -207,6 +231,7 @@ async fn upload_video(
         message: "File uploaded successfully".to_string(),
         filename,
         plex_path,
+        folder: folder.clone(),
     }))
 }
 
@@ -220,6 +245,18 @@ async fn space_check(
     let space_info = state.uploader.get_space_info().await?;
 
     Ok(Json(space_info))
+}
+
+async fn list_folders(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<FoldersResponse>, AppError> {
+    // Verify Firebase authentication
+    let _user = state.auth.verify_token(&headers).await?;
+
+    let folders = state.uploader.list_folders().await?;
+
+    Ok(Json(FoldersResponse { folders }))
 }
 
 fn is_valid_video_file(filename: &str) -> bool {

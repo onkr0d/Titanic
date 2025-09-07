@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
-import { UploadCloud, X, Check, Clapperboard } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { UploadCloud, X, Check, Clapperboard, Folder } from 'lucide-react';
 import { showToast } from '../utils/toast';
-import { uploadVideo } from '../utils/api';
+import { uploadVideo, getFolders } from '../utils/api';
 import Tooltip from './Tooltip';
 import { Switch } from './animate-ui/base/switch';
 
@@ -11,13 +11,24 @@ interface FileState {
     status: 'ready' | 'uploading' | 'uploaded' | 'error';
     error?: string;
     shouldCompress: boolean;
+    folder?: string;
     progress?: number;
 }
 
 const FileUploader = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [files, setFiles] = useState<FileState[]>([]);
+    const [availableFolders, setAvailableFolders] = useState<string[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Fetch available folders on component mount
+    useEffect(() => {
+        const fetchFolders = async () => {
+            const folders = await getFolders();
+            setAvailableFolders(folders);
+        };
+        fetchFolders();
+    }, []);
 
     const isValidVideoFile = (file: File) => {
         return file.type.startsWith('video/');
@@ -61,6 +72,7 @@ const FileUploader = () => {
             id: Math.random().toString(36).substring(2, 11),
             status: 'ready' as const,
             shouldCompress: true, // Default to true for compression
+            folder: "Clips", // Default to Clips folder
             progress: undefined
         }))]);
     };
@@ -75,6 +87,12 @@ const FileUploader = () => {
         ));
     };
 
+    const setFileFolder = (fileId: string, folder: string) => {
+        setFiles(prev => prev.map(f =>
+            f.id === fileId ? { ...f, folder: folder || "Clips" } : f
+        ));
+    };
+
     const uploadFiles = async () => {
         const readyFiles = files.filter(f => f.status === 'ready');
         if (readyFiles.length === 0) return;
@@ -86,8 +104,8 @@ const FileUploader = () => {
 
         try {
             // Upload all files in parallel
-            const uploadPromises = readyFiles.map(async ({ file, id, shouldCompress }) => {
-                const result = await uploadVideo(file, shouldCompress, (progress) => {
+            const uploadPromises = readyFiles.map(async ({ file, id, shouldCompress, folder }) => {
+                const result = await uploadVideo(file, shouldCompress, folder, (progress) => {
                     setFiles(prev => prev.map(f =>
                         f.id === id ? { ...f, progress: progress.progress } : f
                     ));
@@ -157,7 +175,7 @@ const FileUploader = () => {
             {files.length > 0 && (
                 <div className="mt-6">
                     <div className="space-y-3">
-                        {files.map(({ file, id, status, error, shouldCompress, progress }) => (
+                        {files.map(({ file, id, status, error, shouldCompress, folder, progress }) => (
                             <div
                                 key={id}
                                 className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
@@ -166,6 +184,18 @@ const FileUploader = () => {
                                     <Clapperboard className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                                     <div className="flex flex-col flex-grow">
                                         <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{file.name}</span>
+                                        {folder && folder !== "Clips" && (
+                                            <span className="text-xs text-blue-600 dark:text-blue-400 flex items-center">
+                                                <Folder className="w-3 h-3 mr-1" />
+                                                {folder}
+                                            </span>
+                                        )}
+                                        {folder === "Clips" && (
+                                            <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center">
+                                                <Folder className="w-3 h-3 mr-1" />
+                                                Clips
+                                            </span>
+                                        )}
                                         {error && (
                                             <span className="text-xs text-red-500 dark:text-red-400">{error}</span>
                                         )}
@@ -179,13 +209,28 @@ const FileUploader = () => {
                                         )}
                                     </div>
                                 </div>
-                                <div className="flex items-center ml-2">
+                                <div className="flex items-center ml-2 space-x-2">
                                     {status === 'uploaded' ? (
                                         <Check className="w-5 h-5 text-green-500" />
                                     ) : status === 'uploading' ? (
                                         <div className="w-5 h-5 border-2 border-t-blue-500 rounded-full animate-spin" />
                                     ) : (
-                                        <div className="flex">
+                                        <div className="flex items-center space-x-1">
+                                            <Tooltip content="Select destination folder">
+                                                <select
+                                                    value={folder || "Clips"}
+                                                    onChange={(e) => setFileFolder(id, e.target.value)}
+                                                    className="text-xs bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <option value="Clips">Clips</option>
+                                                    {availableFolders.map(folderName => (
+                                                        <option key={folderName} value={folderName}>
+                                                            {folderName}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </Tooltip>
                                             <Tooltip
                                                 content={
                                                     shouldCompress

@@ -36,12 +36,42 @@ impl VideoUploader {
         })
     }
 
-    pub async fn upload_video(&self, filename: &str, temp_path: &Path) -> Result<String, AppError> {
+    pub async fn upload_video(&self, filename: &str, temp_path: &Path, folder: Option<&str>) -> Result<String, AppError> {
+        info!("upload_video called: filename={}, temp_path={:?}, folder={:?}", filename, temp_path, folder);
+
         // Sanitize filename
         let sanitized_filename = sanitize_filename::sanitize(filename);
         info!("Sanitized filename: {}", sanitized_filename);
 
-        let target_path = self.plex_media_path.join(&sanitized_filename);
+        // Always use the Clips directory structure
+        let clips_dir = self.plex_media_path.join("Clips");
+
+        // Determine the target path - either in a subfolder or directly in Clips
+        let target_path = if let Some(folder_name) = folder {
+            // Handle "Clips" as special case - save directly to Clips directory
+            if folder_name == "Clips" {
+                info!("Saving to Clips directory (default)");
+                clips_dir.join(&sanitized_filename)
+            } else {
+                // Sanitize folder name as well
+                let sanitized_folder = sanitize_filename::sanitize(folder_name);
+                let folder_dir = clips_dir.join(&sanitized_folder);
+
+                info!("Creating folder directory: {:?}", folder_dir);
+                // Ensure the folder exists
+                std_fs::create_dir_all(&folder_dir).map_err(|e| {
+                    AppError::InternalError(format!("Failed to create folder '{}': {}", sanitized_folder, e))
+                })?;
+
+                folder_dir.join(&sanitized_filename)
+            }
+        } else {
+            // Fallback: save directly to Clips directory (no subfolder)
+            info!("No folder specified, saving to Clips directory");
+            clips_dir.join(&sanitized_filename)
+        };
+
+        info!("Target path determined: {:?}", target_path);
         info!("Moving file from {:?} to: {:?}", temp_path, target_path);
 
         // Move the file from the temporary path to the final destination
@@ -63,6 +93,41 @@ impl VideoUploader {
         })?;
         let (total, used, free) = disk_space::get(path_str)?;
         Ok(SpaceInfo { total, used, free })
+    }
+
+    pub async fn list_folders(&self) -> Result<Vec<String>, AppError> {
+        let clips_dir = self.plex_media_path.join("Clips");
+
+        // Ensure Clips directory exists
+        std_fs::create_dir_all(&clips_dir).map_err(|e| {
+            AppError::InternalError(format!("Failed to create Clips directory: {}", e))
+        })?;
+
+        // Read the directory entries
+        let mut folders = Vec::new();
+        let entries = std_fs::read_dir(&clips_dir).map_err(|e| {
+            AppError::InternalError(format!("Failed to read Clips directory: {}", e))
+        })?;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| {
+                AppError::InternalError(format!("Failed to read directory entry: {}", e))
+            })?;
+
+            // Only include directories
+            if entry.file_type().map_err(|e| {
+                AppError::InternalError(format!("Failed to get file type: {}", e))
+            })?.is_dir() {
+                if let Some(folder_name) = entry.file_name().to_str() {
+                    folders.push(folder_name.to_string());
+                }
+            }
+        }
+
+        // Sort folders alphabetically
+        folders.sort();
+
+        Ok(folders)
     }
 }
 

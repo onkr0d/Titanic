@@ -90,13 +90,14 @@ def compress_video(input_file: str) -> str:
     logger.debug(f"Video is not H.265, proceeding with compression: {input_file}")
     
     # Equivalent ffmpeg CLI command:
-    # ffmpeg -i <input_file> -vcodec libx265 -crf 22 -preset medium -acodec copy -movflags +faststart -map_metadata 0 <output_file>
+    # ffmpeg -i <input_file> -vcodec libx265 -crf 22 -preset medium -acodec copy -vtag hvc1 -movflags +faststart -map_metadata 0 <output_file>
     ffmpeg.input(input_file).output(
         output_file,
         vcodec='libx265',
         crf=22,
         preset='medium',
         acodec='copy',
+        vtag='hvc1', # better support for Apple devices
         movflags='+faststart', # optimize for streaming, since this is for plex
         map_metadata=0         # preserve original metadata
     ).run()

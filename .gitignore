@@ -3,7 +3,7 @@ backend/dump.rdb
 .env
 
 # umbrel icons
-*.png
+titanic/*.png
 # videos
 *.MP4
 *.M4v

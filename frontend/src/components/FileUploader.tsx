@@ -219,13 +219,13 @@ const FileUploader = () => {
                                         <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{file.name}</span>
                                         {folder && folder !== "Clips" && (
                                             <span className="text-xs text-blue-600 dark:text-blue-400 flex items-center">
-                                                <Folder className="w-3 h-3 mr-1" />
+                                                <Folder className="w-3 h-3" />
                                                 {folder}
                                             </span>
                                         )}
                                         {folder === "Clips" && (
                                             <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center">
-                                                <Folder className="w-3 h-3 mr-1" />
+                                                <Folder className="w-3 h-3" />
                                                 Clips
                                             </span>
                                         )}
@@ -242,13 +242,13 @@ const FileUploader = () => {
                                         )}
                                     </div>
                                 </div>
-                                <div className="flex items-center ml-2 space-x-2">
+                                <div className="flex items-center space-x-2">
                                     {status === 'uploaded' ? (
                                         <Check className="w-5 h-5 text-green-500" />
                                     ) : status === 'uploading' ? (
                                         <div className="w-5 h-5 border-2 border-t-blue-500 rounded-full animate-spin" />
                                     ) : (
-                                        <div className="flex items-center space-x-1">
+                                        <div className="flex items-center">
                                             <Tooltip content="Select destination folder (hold Shift to apply to all files)">
                                                 <select
                                                     value={folder || "Clips"}

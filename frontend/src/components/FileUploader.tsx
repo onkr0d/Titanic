@@ -219,13 +219,13 @@ const FileUploader = () => {
                                         <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{file.name}</span>
                                         {folder && folder !== "Clips" && (
                                             <span className="text-xs text-blue-600 dark:text-blue-400 flex items-center">
-                                                <Folder className="w-3 h-3" />
+                                                <Folder className="w-3 h-3 mr-1" />
                                                 {folder}
                                             </span>
                                         )}
                                         {folder === "Clips" && (
                                             <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center">
-                                                <Folder className="w-3 h-3" />
+                                                <Folder className="w-3 h-3 mr-1" />
                                                 Clips
                                             </span>
                                         )}

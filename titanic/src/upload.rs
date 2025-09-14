@@ -74,7 +74,7 @@ impl VideoUploader {
         let potential_path = target_dir.join(&sanitized_filename);
         let file_exists = std_fs::metadata(&potential_path).is_ok();
         info!("Checking if file exists at {:?}: {}", potential_path, file_exists);
-        
+
         let unique_filename = self.generate_unique_filename(&target_dir, &sanitized_filename);
         let target_path = target_dir.join(&unique_filename);
 
@@ -101,7 +101,7 @@ impl VideoUploader {
     // Generate a unique filename by appending counter if file already exists
     fn generate_unique_filename(&self, directory: &Path, filename: &str) -> String {
         let path = directory.join(filename);
-        
+
         // Use std_fs (std::fs) instead of fs (tokio::fs) since this is a synchronous function
         if std_fs::metadata(&path).is_err() {
             return filename.to_string();
@@ -235,4 +235,3 @@ pub struct SpaceInfo {
     pub used: u64,
     pub free: u64,
 }
- 

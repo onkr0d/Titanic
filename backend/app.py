@@ -159,6 +159,7 @@ def upload_video():
         if file and allowed_file(file.filename):
             # Secure the filename and create full path
             filename = secure_filename(file.filename)
+            filename = filename.replace("_", " ") # undo stupid whitespace -> _ replacement
             target_dir = app.config['UNCOMPRESSED_FOLDER']
             filepath = os.path.join(target_dir, filename)
             
@@ -265,5 +266,4 @@ def docker_health_check():
     return jsonify({"status": "healthy"}), 200
 
 if __name__ == "__main__":
-    # app.run(host="0.0.0.0", port=5000, debug=True)
     asyncio.run(serve(app, Config.from_toml("hypercorn.toml")))

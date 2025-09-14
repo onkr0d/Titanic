@@ -222,10 +222,10 @@ async fn upload_video(
 
     // The temp file is moved by upload_video, so no need to delete it here.
 
-    info!("Successfully uploaded {} to {}", filename, plex_path);
+    info!("Successfully saved {} to {}", filename, plex_path);
 
     Ok(Json(UploadResponse {
-        message: "File uploaded successfully".to_string(),
+        message: "File saved successfully".to_string(),
         filename,
         plex_path,
         folder: folder.clone(),

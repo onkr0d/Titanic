@@ -260,6 +260,54 @@ def get_folders():
         logger.error(f"Unexpected error fetching folders: {str(e)}")
         return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
 
+@app.route('/api/sentry-proxy', methods=['POST'])
+def sentry_proxy():
+    """Proxy endpoint for Sentry API requests to avoid adblocker detection"""
+    try:
+        # Extract the Sentry DSN from request headers or use environment variable
+        sentry_dsn = request.headers.get('X-Sentry-DSN')
+        if not sentry_dsn:
+            return jsonify({'error': 'Missing Sentry DSN'}), 400
+        
+        # Parse DSN to extract project ID and endpoint
+        # DSN format: https://key@organization.ingest.sentry.io/project_id
+        import re
+        dsn_match = re.match(r'https://([^@]+)@([^/]+)/(\d+)', sentry_dsn)
+        if not dsn_match:
+            return jsonify({'error': 'Invalid Sentry DSN format'}), 400
+        
+        key, org_host, project_id = dsn_match.groups()
+        
+        # Build the actual Sentry API endpoint
+        sentry_url = f'https://{org_host}/api/{project_id}/envelope/'
+        
+        # Forward the request to Sentry
+        headers = {
+            'Content-Type': request.headers.get('Content-Type', 'application/x-sentry-envelope'),
+            'User-Agent': request.headers.get('User-Agent', 'Titanic-Sentry-Proxy/1.0'),
+        }
+        
+        # Add authentication header
+        headers['X-Sentry-Auth'] = f'Sentry sentry_version=7, sentry_key={key}, sentry_client=sentry.javascript.react/9.40.0'
+        
+        logger.debug(f"Proxying Sentry request to: {sentry_url}")
+        
+        response = requests.post(
+            sentry_url,
+            data=request.get_data(),
+            headers=headers,
+            timeout=30
+        )
+        
+        # Return the response from Sentry
+        return response.content, response.status_code, {
+            'Content-Type': response.headers.get('Content-Type', 'application/json')
+        }
+        
+    except Exception as e:
+        logger.error(f"Error proxying Sentry request: {str(e)}")
+        return jsonify({'error': f'Proxy error: {str(e)}'}), 500
+
 @app.route('/health')
 def docker_health_check():
     """Unauthenticated health check endpoint for Docker"""

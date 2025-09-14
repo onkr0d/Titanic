@@ -262,11 +262,26 @@ def get_folders():
 
 @app.route('/api/sentry-proxy', methods=['POST'])
 def sentry_proxy():
-    """Proxy endpoint for Sentry API requests to avoid adblocker detection"""
+    """
+    Proxy endpoint for Sentry API requests to avoid adblocker detection.
+    
+    Adblockers often block requests to *.ingest.sentry.io domains.
+    This endpoint acts as a proxy, forwarding Sentry envelope data
+    to the actual Sentry API while appearing as regular application traffic.
+    
+    Expected headers:
+    - X-Sentry-DSN: The Sentry DSN URL (e.g., https://key@org.ingest.sentry.io/project)
+    - Content-Type: application/x-sentry-envelope
+    
+    Returns:
+    - Success: 200 with response from Sentry
+    - Error: 400/500 with error details
+    """
     try:
-        # Extract the Sentry DSN from request headers or use environment variable
+        # Extract the Sentry DSN from request headers
         sentry_dsn = request.headers.get('X-Sentry-DSN')
         if not sentry_dsn:
+            logger.warning("Sentry proxy request missing DSN header")
             return jsonify({'error': 'Missing Sentry DSN'}), 400
         
         # Parse DSN to extract project ID and endpoint
@@ -274,6 +289,7 @@ def sentry_proxy():
         import re
         dsn_match = re.match(r'https://([^@]+)@([^/]+)/(\d+)', sentry_dsn)
         if not dsn_match:
+            logger.warning(f"Invalid Sentry DSN format: {sentry_dsn}")
             return jsonify({'error': 'Invalid Sentry DSN format'}), 400
         
         key, org_host, project_id = dsn_match.groups()
@@ -281,17 +297,16 @@ def sentry_proxy():
         # Build the actual Sentry API endpoint
         sentry_url = f'https://{org_host}/api/{project_id}/envelope/'
         
-        # Forward the request to Sentry
+        # Prepare headers for Sentry API
         headers = {
             'Content-Type': request.headers.get('Content-Type', 'application/x-sentry-envelope'),
             'User-Agent': request.headers.get('User-Agent', 'Titanic-Sentry-Proxy/1.0'),
+            'X-Sentry-Auth': f'Sentry sentry_version=7, sentry_key={key}, sentry_client=sentry.javascript.react/9.40.0'
         }
-        
-        # Add authentication header
-        headers['X-Sentry-Auth'] = f'Sentry sentry_version=7, sentry_key={key}, sentry_client=sentry.javascript.react/9.40.0'
         
         logger.debug(f"Proxying Sentry request to: {sentry_url}")
         
+        # Forward the request to Sentry
         response = requests.post(
             sentry_url,
             data=request.get_data(),
@@ -304,6 +319,9 @@ def sentry_proxy():
             'Content-Type': response.headers.get('Content-Type', 'application/json')
         }
         
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error forwarding to Sentry: {str(e)}")
+        return jsonify({'error': f'Failed to forward request: {str(e)}'}), 502
     except Exception as e:
         logger.error(f"Error proxying Sentry request: {str(e)}")
         return jsonify({'error': f'Proxy error: {str(e)}'}), 500

@@ -13,10 +13,19 @@ RUN apk add --no-cache \
 # Create app directory
 WORKDIR /app
 
-# Copy manifest files
+# Copy manifest files first (for better layer caching)
 COPY Cargo.toml Cargo.lock ./
 
-# Copy source code
+# Create dummy source to build dependencies (this layer gets cached)
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+
+# Build dependencies only (cached if Cargo.toml/Cargo.lock don't change)
+RUN cargo build --release
+
+# Remove dummy binary to force rebuild of actual code
+RUN rm -rf target/release/deps/titanic* target/release/titanic
+
+# Copy actual source code (changes frequently, so this layer rebuilds often)
 COPY src ./src
 
 # Create data directory

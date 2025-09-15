@@ -34,8 +34,16 @@ impl VideoUploader {
         })
     }
 
-    pub async fn upload_video(&self, filename: &str, temp_path: &Path, folder: Option<&str>) -> Result<String, AppError> {
-        info!("upload_video called: filename={}, temp_path={:?}, folder={:?}", filename, temp_path, folder);
+    pub async fn upload_video(
+        &self,
+        filename: &str,
+        temp_path: &Path,
+        folder: Option<&str>,
+    ) -> Result<String, AppError> {
+        info!(
+            "upload_video called: filename={}, temp_path={:?}, folder={:?}",
+            filename, temp_path, folder
+        );
 
         // Sanitize filename
         let sanitized_filename = sanitize_filename::sanitize(filename);
@@ -58,7 +66,9 @@ impl VideoUploader {
                 info!("Creating folder directory: {:?}", folder_dir);
                 // Ensure the folder exists
                 std_fs::create_dir_all(&folder_dir).map_err(|e| {
-                    AppError::InternalError(format!("Failed to create folder '{sanitized_folder}': {e}"))
+                    AppError::InternalError(format!(
+                        "Failed to create folder '{sanitized_folder}': {e}"
+                    ))
                 })?;
 
                 (folder_dir, format!("folder '{sanitized_folder}'"))
@@ -73,13 +83,19 @@ impl VideoUploader {
         // Check for existing files with the same name before generating a unique one
         let potential_path = target_dir.join(&sanitized_filename);
         let file_exists = std_fs::metadata(&potential_path).is_ok();
-        info!("Checking if file exists at {:?}: {}", potential_path, file_exists);
+        info!(
+            "Checking if file exists at {:?}: {}",
+            potential_path, file_exists
+        );
 
         let unique_filename = self.generate_unique_filename(&target_dir, &sanitized_filename);
         let target_path = target_dir.join(&unique_filename);
 
         if unique_filename != sanitized_filename {
-            info!("Generated unique filename: {} (original was {})", unique_filename, sanitized_filename);
+            info!(
+                "Generated unique filename: {} (original was {})",
+                unique_filename, sanitized_filename
+            );
         }
 
         info!("Target path determined: {:?}", target_path);
@@ -90,10 +106,9 @@ impl VideoUploader {
             .await
             .map_err(|e| AppError::InternalError(format!("Failed to copy file: {e}")))?;
 
-        fs::remove_file(&temp_path)
-            .await
-            .map_err(|e| AppError::InternalError(format!("Failed to remove temporary file: {e}")))?;
-
+        fs::remove_file(&temp_path).await.map_err(|e| {
+            AppError::InternalError(format!("Failed to remove temporary file: {e}"))
+        })?;
 
         Ok(target_path.to_string_lossy().to_string())
     }
@@ -150,9 +165,8 @@ impl VideoUploader {
 
         // Read the directory entries
         let mut folders = Vec::new();
-        let entries = std_fs::read_dir(&clips_dir).map_err(|e| {
-            AppError::InternalError(format!("Failed to read Clips directory: {e}"))
-        })?;
+        let entries = std_fs::read_dir(&clips_dir)
+            .map_err(|e| AppError::InternalError(format!("Failed to read Clips directory: {e}")))?;
 
         for entry in entries {
             let entry = entry.map_err(|e| {
@@ -160,9 +174,11 @@ impl VideoUploader {
             })?;
 
             // Only include directories
-            if entry.file_type().map_err(|e| {
-                AppError::InternalError(format!("Failed to get file type: {e}"))
-            })?.is_dir() {
+            if entry
+                .file_type()
+                .map_err(|e| AppError::InternalError(format!("Failed to get file type: {e}")))?
+                .is_dir()
+            {
                 if let Some(folder_name) = entry.file_name().to_str() {
                     folders.push(folder_name.to_string());
                 }
@@ -185,9 +201,7 @@ mod disk_space {
             .arg("-k") // Use 1K blocks for POSIX compatibility
             .arg(path)
             .output()
-            .map_err(|e| {
-                AppError::InternalError(format!("Failed to execute 'df' command: {e}"))
-            })?;
+            .map_err(|e| AppError::InternalError(format!("Failed to execute 'df' command: {e}")))?;
 
         if !output.status.success() {
             return Err(AppError::InternalError(format!(

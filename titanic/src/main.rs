@@ -69,7 +69,6 @@ impl From<MultipartError> for AppError {
 
 const CONTENT_LENGTH_LIMIT: usize = 10 * 1024 * 1024 * 1024; // 10GB
 
-
 #[tokio::main]
 async fn main() -> Result<()> {
     // Load environment variables from .env file
@@ -98,10 +97,7 @@ async fn main() -> Result<()> {
     // Create shared state
 
     let bind_addr = config.bind_address.clone();
-    let state = Arc::new(AppState {
-        auth,
-        uploader,
-    });
+    let state = Arc::new(AppState { auth, uploader });
 
     // Configure CORS
     let cors = CorsLayer::new()
@@ -185,7 +181,11 @@ async fn upload_video(
             }
             Some("folder") => {
                 if let Ok(text) = field.text().await {
-                    folder = if text.trim().is_empty() { None } else { Some(text.trim().to_string()) };
+                    folder = if text.trim().is_empty() {
+                        None
+                    } else {
+                        Some(text.trim().to_string())
+                    };
                     info!("Received folder parameter: {:?}", folder);
                 }
             }
@@ -202,7 +202,9 @@ async fn upload_video(
     if !field_found {
         // Clean up temp file if it was created but no field was found
         let _ = tokio::fs::remove_file(&temp_file_path).await;
-        return Err(AppError::UploadError("No 'file' field in multipart request".to_string()));
+        return Err(AppError::UploadError(
+            "No 'file' field in multipart request".to_string(),
+        ));
     }
 
     let filename =
@@ -216,8 +218,14 @@ async fn upload_video(
     }
 
     // Upload to Plex media directory by moving the temp file
-    info!("About to save video: filename={}, folder={:?}", filename, folder);
-    let plex_path = state.uploader.upload_video(&filename, &temp_file_path, folder.as_deref()).await?;
+    info!(
+        "About to save video: filename={}, folder={:?}",
+        filename, folder
+    );
+    let plex_path = state
+        .uploader
+        .upload_video(&filename, &temp_file_path, folder.as_deref())
+        .await?;
     info!("Upload completed, saved to: {}", plex_path);
 
     // The temp file is moved by upload_video, so no need to delete it here.
@@ -257,7 +265,9 @@ async fn list_folders(
 }
 
 fn is_valid_video_file(filename: &str) -> bool {
-    let valid_extensions = ["mp4", "avi", "mov", "mkv", "wmv", "flv", "m4v", "avi", "webm", "ts"];
+    let valid_extensions = [
+        "mp4", "avi", "mov", "mkv", "wmv", "flv", "m4v", "avi", "webm", "ts",
+    ];
 
     if let Some(extension) = filename.split('.').next_back() {
         valid_extensions.contains(&extension.to_lowercase().as_str())

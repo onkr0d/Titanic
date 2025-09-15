@@ -1,6 +1,6 @@
 use crate::error::AppError;
 use axum::http::HeaderMap;
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -117,7 +117,10 @@ impl FirebaseAuth {
         // Configure validation
         let mut validation = Validation::new(Algorithm::RS256);
         validation.set_audience(&[self.project_id.clone()]);
-        validation.set_issuer(&[format!("https://securetoken.google.com/{}", self.project_id)]);
+        validation.set_issuer(&[format!(
+            "https://securetoken.google.com/{}",
+            self.project_id
+        )]);
         validation.leeway = 60; // Allow for 60 seconds of clock skew
 
         // Decode and verify the token
@@ -134,7 +137,10 @@ impl FirebaseAuth {
         })?;
         info!("Token decoded and validated successfully.");
 
-        info!("Token verified successfully for user: {}", token_data.claims.email);
+        info!(
+            "Token verified successfully for user: {}",
+            token_data.claims.email
+        );
         Ok(FirebaseUser {
             uid: token_data.claims.user_id,
             email: token_data.claims.email,
@@ -165,9 +171,11 @@ impl FirebaseAuth {
                 return Ok(key.clone());
             }
         }
-        
+
         // If still not found after refresh, it's an error
-        Err(AppError::AuthError("Key not found after refresh".to_string()))
+        Err(AppError::AuthError(
+            "Key not found after refresh".to_string(),
+        ))
     }
 
     async fn refresh_public_keys(&self) -> Result<(), AppError> {

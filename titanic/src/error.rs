@@ -12,13 +12,13 @@ use tracing::error;
 pub enum AppError {
     #[error("Authentication error: {0}")]
     AuthError(String),
-    
+
     #[error("Upload error: {0}")]
     UploadError(String),
-    
+
     #[error("Configuration error: {0}")]
     ConfigError(String),
-    
+
     #[error("Internal server error: {0}")]
     InternalError(String),
 }
@@ -33,7 +33,11 @@ impl IntoResponse for AppError {
         };
 
         // Log the error before returning the response
-        error!("Responding with error: status={}, message='{}'", status, self.to_string());
+        error!(
+            "Responding with error: status={}, message='{}'",
+            status,
+            self.to_string()
+        );
 
         let body = Json(json!({
             "error": error_message
@@ -41,4 +45,4 @@ impl IntoResponse for AppError {
 
         (status, body).into_response()
     }
-} 
+}

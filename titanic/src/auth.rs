@@ -169,47 +169,56 @@ impl FirebaseAuth {
 
     async fn verify_custom_token(&self, token: &str) -> Result<FirebaseUser, AppError> {
         info!("Attempting to verify as custom token...");
-        
-        // Decode the token payload to extract user information
-        match self.decode_custom_token_payload(token) {
-            Ok(payload) => {
-                info!("Custom token verified successfully for user: {}", payload.uid);
-                Ok(FirebaseUser {
-                    uid: payload.uid.clone(),
-                    email: format!("{}@custom.token", payload.uid), // Placeholder email for custom tokens
-                    email_verified: true,
-                    name: None,
-                    picture: None,
-                })
-            }
-            Err(e) => {
-                info!("Custom token verification failed: {}", e);
-                Err(e)
-            }
+
+        // Decode the header to get the key ID
+        info!("Decoding custom token header...");
+        let header = jsonwebtoken::decode_header(token)
+            .map_err(|e| AppError::AuthError(format!("Invalid token header: {e}")))?;
+
+        let kid = header.kid.ok_or_else(|| {
+            info!("Auth Error: No key ID in custom token");
+            AppError::AuthError("No key ID in custom token".to_string())
+        })?;
+        info!("Found key ID (kid) in custom token: {}", kid);
+
+        // Get the public key
+        let public_key = self.get_public_key(&kid).await?;
+        info!("Successfully retrieved public key for custom token.");
+
+        // Configure validation for custom tokens
+        let mut validation = Validation::new(Algorithm::RS256);
+        validation.set_audience(&["https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"]);
+        // For custom tokens, issuer validation is done manually since it contains dynamic project IDs
+        validation.leeway = 60; // Allow for 60 seconds of clock skew
+
+        // Decode and verify the token
+        info!("Decoding and validating custom token...");
+        let token_data = decode::<CustomTokenPayload>(
+            token,
+            &DecodingKey::from_rsa_pem(public_key.as_bytes())
+                .map_err(|e| AppError::AuthError(format!("Invalid public key: {e}")))?,
+            &validation,
+        )
+        .map_err(|e| {
+            info!("Custom token verification failed: {}", e);
+            AppError::AuthError(format!("Custom token verification failed: {e}"))
+        })?;
+        info!("Custom token decoded and validated successfully.");
+
+        // Additional issuer validation (since issuer contains dynamic project ID)
+        if !token_data.claims.iss.contains("firebase-adminsdk-") {
+            info!("Custom token issuer validation failed: {}", token_data.claims.iss);
+            return Err(AppError::AuthError("Invalid custom token issuer".to_string()));
         }
-    }
-    
-    fn decode_custom_token_payload(&self, token: &str) -> Result<CustomTokenPayload, AppError> {
-        // Split the token and decode the payload (middle part)
-        let parts: Vec<&str> = token.split('.').collect();
-        if parts.len() != 3 {
-            return Err(AppError::AuthError("Invalid token format".to_string()));
-        }
-        
-        // Decode the payload (base64url)
-        use base64::{Engine as _, engine::general_purpose};
-        let payload_bytes = general_purpose::URL_SAFE_NO_PAD.decode(parts[1])
-            .map_err(|_| AppError::AuthError("Invalid token payload".to_string()))?;
-        
-        let payload: CustomTokenPayload = serde_json::from_slice(&payload_bytes)
-            .map_err(|_| AppError::AuthError("Invalid token payload format".to_string()))?;
-        
-        // Basic validation - check if it's a custom token
-        if payload.iss.contains("firebase-adminsdk-") && payload.aud == "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit" {
-            Ok(payload)
-        } else {
-            Err(AppError::AuthError("Not a valid custom token".to_string()))
-        }
+
+        info!("Custom token verified successfully for user: {}", token_data.claims.uid);
+        Ok(FirebaseUser {
+            uid: token_data.claims.uid.clone(),
+            email: format!("{}@custom.token", token_data.claims.uid), // Placeholder email for custom tokens
+            email_verified: true,
+            name: None,
+            picture: None,
+        })
     }
 
     async fn get_public_key(&self, kid: &str) -> Result<String, AppError> {

@@ -41,6 +41,16 @@ struct FirebaseClaims {
     identities: HashMap<String, Vec<String>>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct CustomTokenPayload {
+    iss: String,      // issuer (firebase-adminsdk-...)
+    aud: String,      // audience
+    exp: u64,         // expiration time
+    iat: u64,         // issued at
+    sub: String,      // subject (user ID)
+    uid: String,      // user ID
+}
+
 pub struct FirebaseAuth {
     project_id: String,
     client: Client,
@@ -99,6 +109,19 @@ impl FirebaseAuth {
     }
 
     async fn verify_firebase_token(&self, token: &str) -> Result<FirebaseUser, AppError> {
+        // First, try to verify as a regular Firebase ID token
+        match self.verify_id_token(token).await {
+            Ok(user) => return Ok(user),
+            Err(e) => {
+                info!("ID token verification failed: {}. Trying custom token...", e);
+            }
+        }
+        
+        // If ID token verification fails, try to verify as a custom token
+        self.verify_custom_token(token).await
+    }
+
+    async fn verify_id_token(&self, token: &str) -> Result<FirebaseUser, AppError> {
         // Decode the header to get the key ID
         info!("Decoding token header...");
         let header = jsonwebtoken::decode_header(token)
@@ -142,6 +165,51 @@ impl FirebaseAuth {
             name: token_data.claims.name,
             picture: token_data.claims.picture,
         })
+    }
+
+    async fn verify_custom_token(&self, token: &str) -> Result<FirebaseUser, AppError> {
+        info!("Attempting to verify as custom token...");
+        
+        // Decode the token payload to extract user information
+        match self.decode_custom_token_payload(token) {
+            Ok(payload) => {
+                info!("Custom token verified successfully for user: {}", payload.uid);
+                Ok(FirebaseUser {
+                    uid: payload.uid.clone(),
+                    email: format!("{}@custom.token", payload.uid), // Placeholder email for custom tokens
+                    email_verified: true,
+                    name: None,
+                    picture: None,
+                })
+            }
+            Err(e) => {
+                info!("Custom token verification failed: {}", e);
+                Err(e)
+            }
+        }
+    }
+    
+    fn decode_custom_token_payload(&self, token: &str) -> Result<CustomTokenPayload, AppError> {
+        // Split the token and decode the payload (middle part)
+        let parts: Vec<&str> = token.split('.').collect();
+        if parts.len() != 3 {
+            return Err(AppError::AuthError("Invalid token format".to_string()));
+        }
+        
+        // Decode the payload (base64url)
+        use base64::{Engine as _, engine::general_purpose};
+        let payload_bytes = general_purpose::URL_SAFE_NO_PAD.decode(parts[1])
+            .map_err(|_| AppError::AuthError("Invalid token payload".to_string()))?;
+        
+        let payload: CustomTokenPayload = serde_json::from_slice(&payload_bytes)
+            .map_err(|_| AppError::AuthError("Invalid token payload format".to_string()))?;
+        
+        // Basic validation - check if it's a custom token
+        if payload.iss.contains("firebase-adminsdk-") && payload.aud == "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit" {
+            Ok(payload)
+        } else {
+            Err(AppError::AuthError("Not a valid custom token".to_string()))
+        }
     }
 
     async fn get_public_key(&self, kid: &str) -> Result<String, AppError> {

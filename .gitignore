@@ -8,3 +8,20 @@ titanic/*.png
 *.MP4
 *.M4v
 *.MOV
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Rust build artifacts
+/titanic/target/
+Cargo.lock
+
+# Node modules
+node_modules/
+
+# Python cache
+*.egg-info/
+.mypy_cache/

@@ -7,6 +7,8 @@ import json
 import subprocess
 import random
 import functools
+import firebase_admin
+from firebase_admin import auth, credentials
 
 # This configures logging for any process that imports this module.
 # It's safe to call here because logging.basicConfig() does nothing
@@ -18,6 +20,31 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+def initialize_firebase():
+    """
+    Initialize Firebase Admin SDK if not already initialized.
+    This is needed because RQ workers run in separate processes.
+    """
+    try:
+        # Check if Firebase is already initialized
+        firebase_admin.get_app()
+        logger.debug("Firebase app already initialized")
+    except ValueError:
+        # Firebase not initialized, so initialize it
+        logger.debug("Initializing Firebase app for job worker")
+
+        # Get credentials path from environment or use default
+        cred_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS',
+                                   os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                               'admin-sdk-cred.json'))
+
+        if not os.path.exists(cred_path):
+            raise FileNotFoundError(f"Firebase credentials file not found: {cred_path}")
+
+        cred = credentials.Certificate(cred_path)
+        firebase_admin.initialize_app(cred)
+        logger.debug("Firebase app initialized successfully")
 
 def get_video_codec(input_file: str) -> str:
     """
@@ -173,6 +200,42 @@ def retry_with_exponential_backoff(
         return wrapper
     return decorator
 
+def generate_fresh_auth_headers(user_uid, app_check_token):
+    """
+    Generate fresh authentication headers using Firebase Admin SDK.
+    This avoids token expiration issues for long-running jobs.
+
+    Args:
+        user_uid: The Firebase user UID
+        app_check_token: The Firebase App Check token
+
+    Returns:
+        dict: Fresh authentication headers
+    """
+    try:
+        # Initialize Firebase if not already done (important for RQ workers)
+        initialize_firebase()
+
+        # Generate a fresh custom token for the user
+        # Custom tokens can be used server-to-server and don't expire immediately
+        custom_token = auth.create_custom_token(user_uid)
+        
+        # Convert bytes to string if needed
+        if isinstance(custom_token, bytes):
+            custom_token = custom_token.decode('utf-8')
+        
+        headers = {
+            'Authorization': f'Bearer {custom_token}',
+            'X-Firebase-AppCheck': app_check_token or ''
+        }
+        
+        logger.debug(f"Generated fresh custom token for user: {user_uid}")
+        return headers
+        
+    except Exception as e:
+        logger.error(f"Failed to generate fresh auth headers for user {user_uid}: {str(e)}")
+        raise
+
 @retry_with_exponential_backoff(max_retries=5, base_delay=1.0, max_delay=30.0)
 def upload_video_to_umbrel(input_file=None):
     job = rq.get_current_job()
@@ -203,18 +266,28 @@ def upload_video_to_umbrel(input_file=None):
     with open(compressed_file, 'rb') as f:
         files = {'file': (os.path.basename(compressed_file), f, 'video/mp4')}
 
-        # Extract folder from headers if present
-        auth_headers = job.meta.copy()
-        folder = auth_headers.pop('X-Folder', None)  # Remove from headers, get value
-        logger.debug(f"Job meta headers: {job.meta}")
-        logger.debug(f"Extracted folder from headers: {folder}")
+        # Generate fresh authentication headers to avoid token expiration
+        user_uid = job.meta.get('user_uid')
+        app_check_token = job.meta.get('X-Firebase-AppCheck')
+        
+        if not user_uid:
+            logger.error("No user UID found in job metadata")
+            raise ValueError("No user UID found in job metadata")
+        
+        logger.debug(f"Generating fresh auth headers for user: {user_uid}")
+        auth_headers = generate_fresh_auth_headers(user_uid, app_check_token)
+        
+        # Extract folder from metadata if present
+        folder = job.meta.get('X-Folder', None)
+        logger.debug(f"Job meta: {job.meta}")
+        logger.debug(f"Extracted folder from metadata: {folder}")
         if folder:
             files['folder'] = (None, folder)  # Add folder as form field
             logger.debug(f"Uploading to folder: {folder}")
         else:
-            logger.debug("No folder found in job headers")
+            logger.debug("No folder found in job metadata")
 
-        logger.debug(f"Uploading with headers: {auth_headers}")
+        logger.debug(f"Uploading with fresh headers: {[k for k in auth_headers.keys()]}")  # Log header keys only
 
         upload_umbrel_url = umbrel_url + '/api/upload'
         response = requests.post(upload_umbrel_url, files=files, headers=auth_headers, timeout=300)

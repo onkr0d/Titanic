@@ -17,9 +17,10 @@ mod upload;
 use axum::extract::multipart::MultipartError;
 
 use tower_http::{
-    cors::{Any, CorsLayer},
+    cors::CorsLayer,
     limit::RequestBodyLimitLayer,
 };
+use axum::http::{Method, HeaderName, HeaderValue};
 
 use auth::FirebaseAuth;
 use config::Config;
@@ -101,9 +102,26 @@ async fn main() -> Result<()> {
 
     // Configure CORS
     let cors = CorsLayer::new()
-        .allow_origin(vec!["https://titanic.ivan.boston", "http://localhost:5173", "http://localhost:6969", "http://localhost:5002"])
-        .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
-        .allow_headers(vec!["Content-Type", "Authorization", "X-Firebase-AppCheck", "baggage", "sentry-trace"]);
+        .allow_origin([
+            HeaderValue::from_static("https://titanic.ivan.boston"),
+            HeaderValue::from_static("http://localhost:5173"),
+            HeaderValue::from_static("http://localhost:6969"),
+            HeaderValue::from_static("http://localhost:5002"),
+        ])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([
+            HeaderName::from_static("content-type"),
+            HeaderName::from_static("authorization"),
+            HeaderName::from_static("x-firebase-appcheck"),
+            HeaderName::from_static("baggage"),
+            HeaderName::from_static("sentry-trace"),
+        ]);
 
     // Build router
     let app = Router::new()

@@ -8,6 +8,7 @@ services:
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/admin-sdk-cred
       - UMBREL_SERVER_URL=http://100.97.35.4:3029 # tailsale ip
+      - FIREBASE_API_KEY=${FIREBASE_API_KEY}
     secrets:
       - admin-sdk-cred
     healthcheck:

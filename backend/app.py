@@ -182,25 +182,26 @@ def upload_video():
                 logger.debug("File saved successfully")
                 
                 # Enqueue the video processing job only if compression is enabled
-                headers = {
-                    'Authorization': request.headers.get('Authorization'),
-                    'X-Firebase-AppCheck': request.headers.get('X-Firebase-AppCheck')
+                # Store user UID instead of raw Firebase ID token
+                # The raw ID token expires in 1 hour, but we can generate fresh ones using the UID
+                job_meta = {
+                    'user_uid': request.user.get('uid'),
                 }
 
-                # Include folder information in the headers for the Umbrel job
+                # Include folder information in the metadata for the Umbrel job
                 if folder:
-                    headers['X-Folder'] = folder
+                    job_meta['X-Folder'] = folder
                     logger.debug(f"Including folder in upload: {folder}")
                 else:
                     logger.debug("No folder specified for upload")
 
                 if should_compress:
                     ffmpeg_job = ffmpeg_queue.enqueue(compress_video, args=[filepath])
-                    # give the umbrel job the auth headers so the umbrel server can verify them
-                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, depends_on=ffmpeg_job, meta=headers)
+                    # Store user context instead of raw tokens to avoid expiration issues
+                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, depends_on=ffmpeg_job, meta=job_meta)
                 else:
                     # If compression is disabled, just upload the original file
-                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, args=[filepath], meta=headers)
+                    umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, args=[filepath], meta=job_meta)
                 
                 return jsonify({
                     'message': 'File uploaded successfully',
@@ -242,7 +243,6 @@ def get_folders():
         # Forward the authorization headers
         headers = {
             'Authorization': request.headers.get('Authorization'),
-            'X-Firebase-AppCheck': request.headers.get('X-Firebase-AppCheck')
         }
 
         response = requests.get(umbrel_url, headers=headers, timeout=30)

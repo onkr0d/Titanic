@@ -38,15 +38,21 @@ services:
     build:
       context: ./titanic
       dockerfile: Dockerfile.dev
+      # Only rebuild when dependencies change, not on every source change
+      args:
+        BUILDKIT_INLINE_CACHE: 1
     container_name: titanic_umbrel_dev
     ports:
       - "3029:3029"
     env_file:
       - .env
     volumes:
+      # Mount source files for hot-reloading (cargo-watch will rebuild)
       - ./titanic/src:/app/src
       - ./titanic/Cargo.toml:/app/Cargo.toml
       - ./titanic/Cargo.lock:/app/Cargo.lock
+      # Mount target directory to persist compiled dependencies
+      - titanic_dev_cache:/app/target
       - ./titanic/media:/data/media
     networks:
       - titanic_dev_network
@@ -55,6 +61,10 @@ services:
 networks:
   titanic_dev_network:
     driver: bridge
+
+volumes:
+  titanic_dev_cache:
+    driver: local
 
 secrets:
   admin-sdk-cred:

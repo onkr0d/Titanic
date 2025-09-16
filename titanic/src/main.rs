@@ -101,9 +101,9 @@ async fn main() -> Result<()> {
 
     // Configure CORS
     let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_origin(vec!["https://titanic.ivan.boston", "http://localhost:5173", "http://localhost:6969", "http://localhost:5002"])
+        .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+        .allow_headers(vec!["Content-Type", "Authorization", "X-Firebase-AppCheck", "baggage", "sentry-trace"]);
 
     // Build router
     let app = Router::new()

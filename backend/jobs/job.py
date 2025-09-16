@@ -8,7 +8,7 @@ import subprocess
 import random
 import functools
 import firebase_admin
-from firebase_admin import auth, credentials
+from firebase_admin import credentials
 
 # This configures logging for any process that imports this module.
 # It's safe to call here because logging.basicConfig() does nothing
@@ -200,29 +200,25 @@ def retry_with_exponential_backoff(
         return wrapper
     return decorator
 
-def generate_fresh_auth_headers(user_uid):
-    initialize_firebase()
+def _id_token_from_refresh(refresh_token: str, api_key: str) -> str:
+    resp = requests.post(
+        f"https://securetoken.googleapis.com/v1/token?key={api_key}",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()["id_token"]
 
-    custom_token = auth.create_custom_token(user_uid)
-    if isinstance(custom_token, bytes):
-        custom_token = custom_token.decode("utf-8")
 
-    api_key = os.environ.get("FIREBASE_API_KEY")
-    try:
-        resp = requests.post(
-            f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={api_key}",
-            json={"token": custom_token, "returnSecureToken": True},
-            timeout=10,
-        )
-        resp.raise_for_status()
-    except requests.HTTPError as e:
-        logger.error("Status:", resp.status_code)
-        logger.error("Body:", resp.text)
-        raise
-    id_token = resp.json()["idToken"]
+def generate_fresh_auth_headers(job_meta):
+    api_key = os.environ["FIREBASE_API_KEY"]
+    refresh_token = job_meta.get("refresh_token")
+    if not refresh_token:
+        raise RuntimeError("Missing refresh_token in job meta")
+    id_token = _id_token_from_refresh(refresh_token, api_key)
+    return {"Authorization": f"Bearer {id_token}"}
 
-    headers = {"Authorization": f"Bearer {id_token}"}
-    return headers
 
 
 @retry_with_exponential_backoff(max_retries=5, base_delay=1.0, max_delay=30.0)
@@ -264,7 +260,7 @@ def upload_video_to_umbrel(input_file=None):
         
         logger.debug(f"Generating fresh auth headers for user: {user_uid}")
         
-        auth_headers = generate_fresh_auth_headers(user_uid)
+        auth_headers = generate_fresh_auth_headers(job.meta)
         
         # Extract folder from metadata if present
         folder = job.meta.get('X-Folder', None)

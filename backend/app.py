@@ -102,12 +102,8 @@ def verify_firebase_token(f):
 
 @app.before_request
 def verify_app_check() -> None:
-    # no AppCheck for OPTIONS requests (CORS preflight)
-    if request.method == 'OPTIONS':
-        return
-    
-    # no AppCheck for health endpoint (Docker health checks)
-    if request.path == '/health':
+    # no AppCheck for OPTIONS requests (CORS preflight), health endpoint, or dev mode
+    if IS_DEV or request.method == 'OPTIONS' or request.path == '/health':
         return
     
     app_check_token = flask.request.headers.get("X-Firebase-AppCheck", default="")
@@ -185,8 +181,29 @@ def upload_video():
                 # Store user UID instead of raw Firebase ID token
                 # The raw ID token expires in 1 hour, but we can generate fresh ones using the UID
                 job_meta = {
-                    'user_uid': request.user.get('uid'),
+                    'user_uid': request.user.get('uid', 'unknown'),
                 }
+
+                custom_token = auth.create_custom_token(request.user.get('uid'))
+                if isinstance(custom_token, bytes):
+                    custom_token = custom_token.decode("utf-8")
+
+                api_key = os.environ.get("FIREBASE_API_KEY")
+                headers = {}
+                app_check_token = request.headers.get("X-Firebase-AppCheck")
+                if app_check_token:
+                    headers["X-Firebase-AppCheck"] = app_check_token  # App Check is enforced for this method
+
+                resp = requests.post(
+                    f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={api_key}",
+                    json={"token": custom_token, "returnSecureToken": True},
+                    headers=headers,
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                tokens = resp.json()  # has idToken, refreshToken, expiresIn
+
+                job_meta["refresh_token"] = tokens["refreshToken"]
 
                 # Include folder information in the metadata for the Umbrel job
                 if folder:

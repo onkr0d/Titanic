@@ -216,8 +216,8 @@ def generate_fresh_auth_headers(user_uid):
         )
         resp.raise_for_status()
     except requests.HTTPError as e:
-        print("Status:", resp.status_code)
-        print("Body:", resp.text)
+        logger.error("Status:", resp.status_code)
+        logger.error("Body:", resp.text)
         raise
     id_token = resp.json()["idToken"]
 

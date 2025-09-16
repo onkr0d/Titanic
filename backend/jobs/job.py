@@ -208,12 +208,17 @@ def generate_fresh_auth_headers(user_uid):
         custom_token = custom_token.decode("utf-8")
 
     api_key = os.environ.get("FIREBASE_API_KEY")
-    resp = requests.post(
-        f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={api_key}",
-        json={"token": custom_token, "returnSecureToken": True},
-        timeout=10,
-    )
-    resp.raise_for_status()
+    try:
+        resp = requests.post(
+            f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={api_key}",
+            json={"token": custom_token, "returnSecureToken": True},
+            timeout=10,
+        )
+        resp.raise_for_status()
+    except requests.HTTPError as e:
+        print("Status:", resp.status_code)
+        print("Body:", resp.text)
+        raise
     id_token = resp.json()["idToken"]
 
     headers = {"Authorization": f"Bearer {id_token}"}

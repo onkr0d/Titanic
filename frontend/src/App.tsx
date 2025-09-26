@@ -108,7 +108,7 @@ const App = () => {
                 <FileUploader />
             </div>
             <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 z-10">
-                <div className="md:hidden space-y-2">
+                <div className="md:hidden space-y-2 max-w-[50vw]">
                     <DiskSpaceIndicator />
                 </div>
                 <div className="hidden md:block">

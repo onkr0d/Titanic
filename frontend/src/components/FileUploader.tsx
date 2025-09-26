@@ -213,10 +213,10 @@ const FileUploader = () => {
                                 key={id}
                                 className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
                             >
-                                <div className="flex items-center space-x-3 flex-grow">
-                                    <Clapperboard className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-                                    <div className="flex flex-col flex-grow">
-                                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{file.name}</span>
+                                <div className="flex items-center space-x-3 flex-grow min-w-0">
+                                    <Clapperboard className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+                                    <div className="flex flex-col flex-grow min-w-0">
+                                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{file.name}</span>
                                         {folder && folder !== "Clips" && (
                                             <span className="text-xs text-blue-600 dark:text-blue-400 flex items-center">
                                                 <Folder className="w-3 h-3 mr-1" />
@@ -242,7 +242,7 @@ const FileUploader = () => {
                                         )}
                                     </div>
                                 </div>
-                                <div className="flex items-center space-x-2">
+                                <div className="flex items-center space-x-2 flex-shrink-0">
                                     {status === 'uploaded' ? (
                                         <Check className="w-5 h-5 text-green-500" />
                                     ) : status === 'uploading' ? (

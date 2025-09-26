@@ -4,6 +4,8 @@ import { showToast } from '../utils/toast';
 import { uploadVideo, getFolders } from '../utils/api';
 import Tooltip from './Tooltip';
 import { Switch } from './animate-ui/base/switch';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './animate-ui/components/radix/dropdown-menu';
+import { FolderOpen } from 'lucide-react';
 
 interface FileState {
     file: File;
@@ -43,8 +45,7 @@ const FileUploader = () => {
             }
         };
 
-        // Try document instead of window for better event capturing
-        document.addEventListener('keydown', handleKeyDown, true); // useCapture = true
+        document.addEventListener('keydown', handleKeyDown, true);
         document.addEventListener('keyup', handleKeyUp, true);
 
         return () => {
@@ -250,21 +251,34 @@ const FileUploader = () => {
                                     ) : (
                                         <div className="flex items-center">
                                             <Tooltip content="Select destination folder (hold Shift to apply to all files)">
-                                                <select
-                                                    value={folder || "Clips"}
-                                                    onChange={(e) => {
-                                                        setFileFolder(id, e.target.value);
-                                                    }}
-                                                    className="text-xs bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                >
-                                                    <option value="Clips">Clips</option>
-                                                    {availableFolders.map(folderName => (
-                                                        <option key={folderName} value={folderName}>
-                                                            {folderName}
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <button
+                                                            className="text-xs bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-1"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            <FolderOpen className="w-3 h-3" />
+                                                            {folder || "Clips"}
+                                                        </button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="start" className="w-40">
+                                                        <DropdownMenuItem
+                                                            onClick={() => setFileFolder(id, "Clips")}
+                                                            className={folder === "Clips" ? "bg-accent" : ""}
+                                                        >
+                                                            Clips
+                                                        </DropdownMenuItem>
+                                                        {availableFolders.map(folderName => (
+                                                            <DropdownMenuItem
+                                                                key={folderName}
+                                                                onClick={() => setFileFolder(id, folderName)}
+                                                                className={folder === folderName ? "bg-accent" : ""}
+                                                            >
+                                                                {folderName}
+                                                            </DropdownMenuItem>
+                                                        ))}
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
                                             </Tooltip>
                                             <Tooltip
                                                 content={

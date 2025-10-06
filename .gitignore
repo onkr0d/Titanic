@@ -1,5 +1,6 @@
 backend/admin-sdk-cred.json
 backend/dump.rdb
+backend/models/
 .env
 
 # umbrel icons

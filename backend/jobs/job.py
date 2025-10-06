@@ -83,6 +83,128 @@ def get_video_codec(input_file: str) -> str:
         logger.error(f"Unexpected error getting codec for {input_file}: {e}")
         return None
 
+def get_audio_streams(input_file: str) -> list:
+    """
+    Get all audio streams in a video file using ffprobe.
+    Returns a list of audio stream information.
+    """
+    try:
+        cmd = [
+            'ffprobe',
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_streams',
+            '-select_streams', 'a',  # All audio streams
+            input_file
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        data = json.loads(result.stdout)
+        
+        audio_streams = data.get('streams', [])
+        logger.debug(f"Detected {len(audio_streams)} audio stream(s)")
+        return audio_streams
+            
+    except subprocess.CalledProcessError as e:
+        logger.error(f"ffprobe failed for {input_file}: {e}")
+        return []
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse ffprobe output: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Unexpected error getting audio streams for {input_file}: {e}")
+        return []
+
+def process_audio_with_rnnoise(input_file: str, output_file: str) -> str:
+    """
+    Mix the 2nd audio stream (mic, index 1) with the 1st stream (system/game) 
+    to create a new DEFAULT track, and preserve both original audio streams untouched.
+    
+    If ENABLE_RNNOISE env var is set to 'true', applies RNNoise denoising to the mic
+    before mixing. Otherwise, mixes the raw mic audio.
+    
+    Video is copied through.
+    """
+    try:
+        # Probe audio streams
+        audio_streams = get_audio_streams(input_file)
+        if not audio_streams:
+            logger.warning("No audio streams; skipping audio processing")
+            return None
+        if len(audio_streams) < 2:
+            logger.warning("Fewer than 2 audio streams; skipping audio mixing")
+            return None
+
+        # Check if RNNoise is enabled via environment variable
+        enable_rnnoise = os.environ.get('ENABLE_RNNOISE', 'false').lower() == 'true'
+        rnnoise_model = "/app/models/rnnoise-model.rnnn"
+        have_model = os.path.exists(rnnoise_model)
+
+        # Build filter graph:
+        # Step 1: Process mic audio (with or without RNNoise)
+        # Step 2: Mix processed mic with system audio
+        if enable_rnnoise and have_model:
+            logger.info("RNNoise enabled - applying denoising to mic track before mixing")
+            # Apply RNNoise denoising to mic track
+            denoise = f"[0:a:1]arnndn=m={rnnoise_model}[mic];"
+        else:
+            if enable_rnnoise and not have_model:
+                logger.warning("RNNoise enabled but model not found at %s; using raw mic", rnnoise_model)
+            else:
+                logger.info("RNNoise disabled - mixing raw mic with system audio")
+            # Pass mic through without denoising
+            denoise = f"[0:a:1]anull[mic];"
+
+        # Mix system audio with (possibly denoised) mic audio
+        filter_complex = (
+            denoise +
+            "[0:a:0][mic]amix=inputs=2:duration=longest:normalize=0[a_mix]"
+        )
+
+        # Assemble ffmpeg command
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", input_file,
+            "-filter_complex", filter_complex,
+
+            # Video: passthrough
+            "-map", "0:v:0", "-c:v", "copy",
+
+            # 1) New default mixed track (AAC)
+            "-map", "[a_mix]", "-c:a:0", "aac", "-b:a:0", "256k",
+            "-metadata:s:a:0", "title=Default mix (system + denoised mic)",
+            "-metadata:s:a:0", "language=eng",
+            "-disposition:a:0", "default",
+
+            # 2) Original system audio (copy)
+            "-map", "0:a:0", "-c:a:1", "copy",
+            "-metadata:s:a:1", "title=System only (raw)",
+            "-metadata:s:a:1", "language=eng",
+            "-disposition:a:1", "0",
+
+            # 3) Original mic audio (copy)
+            "-map", "0:a:1", "-c:a:2", "copy",
+            "-metadata:s:a:2", "title=Mic only (raw)",
+            "-metadata:s:a:2", "language=eng",
+            "-disposition:a:2", "0",
+
+            "-movflags", "+faststart",
+            output_file,
+        ]
+
+        logger.debug("Running FFmpeg: %s", " ".join(cmd))
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        logger.info("Audio processing complete: %s", output_file)
+        return output_file
+
+    except subprocess.CalledProcessError as e:
+        logger.error("Audio processing failed: %s", e)
+        logger.error("stderr: %s", e.stderr)
+        return None
+    except Exception as e:
+        logger.error("Unexpected error during audio processing: %s", e)
+        return None
+
 def is_h265_video(input_file: str) -> bool:
     """
     Check if a video file is already encoded in H.265/HEVC.
@@ -103,37 +225,81 @@ def compress_video(input_file: str) -> str:
     
     logger.debug(f"Starting compression check: {input_file} -> {output_file}")
     
-    # Check if video is already H.265
-    if is_h265_video(input_file):
-        logger.info(f"Video is already H.265, skipping compression: {input_file}")
+    # Step 1: Process audio with RNNoise and dynamic range compression
+    # Create temporary file for audio-processed video
+    temp_audio_processed = os.path.join(os.path.dirname(input_file), f"audio_processed_{filename}")
+    
+    audio_processed_file = process_audio_with_rnnoise(input_file, temp_audio_processed)
+    
+    # Determine which file to use for video compression
+    # If audio processing succeeded, use the audio-processed file; otherwise, use original
+    source_file = audio_processed_file if audio_processed_file else input_file
+    
+    # Step 2: Check if video is already H.265
+    if is_h265_video(source_file):
+        logger.info(f"Video is already H.265, skipping video compression")
         
-        # Move the file to compressed directory without re-encoding
+        # If we processed audio, the source_file is already the processed one
+        # Just move it to the output location
         import shutil
-        shutil.move(input_file, output_file)
-        logger.debug(f"Moved H.265 video to compressed directory: {output_file}")
+        if source_file != output_file:
+            shutil.move(source_file, output_file)
+        logger.debug(f"Moved processed video to compressed directory: {output_file}")
+        
+        # Clean up original if different from source
+        if audio_processed_file and os.path.exists(input_file):
+            os.remove(input_file)
+            logger.debug(f"Removed original file: {input_file}")
         
         return output_file
     
-    logger.debug(f"Video is not H.265, proceeding with compression: {input_file}")
+    logger.debug(f"Video is not H.265, proceeding with video compression")
     
-    # Equivalent ffmpeg CLI command:
-    # ffmpeg -i <input_file> -vcodec libx265 -crf 22 -preset medium -acodec copy -vtag hvc1 -movflags +faststart -map_metadata 0 <output_file>
-    ffmpeg.input(input_file).output(
-        output_file,
-        vcodec='libx265',
-        crf=22,
-        preset='medium',
-        acodec='copy',
-        vtag='hvc1', # better support for Apple devices
-        movflags='+faststart', # optimize for streaming, since this is for plex
-        map_metadata=0         # preserve original metadata
-    ).run()
+    # Step 3: Compress video (audio already processed, so copy audio streams)
+    try:
+        # Use subprocess for more control over ffmpeg
+        cmd = [
+            'ffmpeg',
+            '-i', source_file,
+            '-vcodec', 'libx265',
+            '-crf', '22',
+            '-preset', 'medium',
+            '-c:a', 'copy',  # Copy already-processed audio
+            '-vtag', 'hvc1',  # Better support for Apple devices
+            '-movflags', '+faststart',  # Optimize for streaming
+            '-map_metadata', '0',  # Preserve original metadata
+            '-y',  # Overwrite output
+            output_file
+        ]
+        
+        logger.debug(f"Running video compression command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        logger.debug(f"Video compression completed: {output_file}")
+        
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Video compression failed: {e}")
+        logger.error(f"FFmpeg stderr: {e.stderr}")
+        # Fall back to original method if subprocess fails
+        logger.info("Falling back to ffmpeg-python library")
+        ffmpeg.input(source_file).output(
+            output_file,
+            vcodec='libx265',
+            crf=22,
+            preset='medium',
+            **{'c:a': 'copy'},
+            vtag='hvc1',
+            movflags='+faststart',
+            map_metadata=0
+        ).run()
     
-    logger.debug(f"Compression completed: {output_file}")
+    # Clean up temporary and original files
+    if audio_processed_file and os.path.exists(source_file) and source_file != input_file:
+        os.remove(source_file)
+        logger.debug(f"Removed temporary audio-processed file: {source_file}")
     
-    # Remove original uncompressed file
-    os.remove(input_file)
-    logger.debug(f"Removed original file: {input_file}")
+    if os.path.exists(input_file):
+        os.remove(input_file)
+        logger.debug(f"Removed original file: {input_file}")
     
     return output_file
 
@@ -248,38 +414,65 @@ def upload_video_to_umbrel(input_file=None):
     # Upload to Umbrel server with automatic retry on failure
     logger.debug(f"Uploading video to Umbrel: {compressed_file}")
 
-    with open(compressed_file, 'rb') as f:
-        files = {'file': (os.path.basename(compressed_file), f, 'video/mp4')}
+    # Generate fresh authentication headers to avoid token expiration
+    user_uid = job.meta.get('user_uid')
+    
+    if not user_uid:
+        logger.error("No user UID found in job metadata")
+        raise ValueError("No user UID found in job metadata")
+    
+    logger.debug(f"Generating fresh auth headers for user: {user_uid}")
+    
+    auth_headers = generate_fresh_auth_headers(job.meta)
+    
+    # Extract folder from metadata if present
+    folder = job.meta.get('X-Folder', None)
+    logger.debug(f"Job meta: {job.meta}")
+    logger.debug(f"Extracted folder from metadata: {folder}")
+    
+    # Build the multipart form data manually to avoid memory issues
+    # For large files, we need to stream the upload instead of loading into memory
+    from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
+    
+    fields = {
+        'file': (os.path.basename(compressed_file), open(compressed_file, 'rb'), 'video/mp4')
+    }
+    
+    if folder:
+        fields['folder'] = folder
+        logger.debug(f"Uploading to folder: {folder}")
+    else:
+        logger.debug("No folder found in job metadata")
+    
+    # Create multipart encoder for streaming upload
+    encoder = MultipartEncoder(fields=fields)
+    
+    # Monitor upload progress
+    total_size = encoder.len
+    logger.debug(f"Total upload size: {total_size / (1024*1024*1024):.2f} GB")
+    
+    def monitor_callback(monitor):
+        progress = (monitor.bytes_read / total_size) * 100
+        if int(progress) % 10 == 0:  # Log every 10%
+            logger.debug(f"Upload progress: {progress:.1f}% ({monitor.bytes_read / (1024*1024):.1f} MB / {total_size / (1024*1024):.1f} MB)")
+    
+    monitor = MultipartEncoderMonitor(encoder, monitor_callback)
+    
+    auth_headers['Content-Type'] = monitor.content_type
+    logger.debug(f"Uploading with fresh headers: {[k for k in auth_headers.keys()]}")  # Log header keys only
 
-        # Generate fresh authentication headers to avoid token expiration
-        user_uid = job.meta.get('user_uid')
-        
-        if not user_uid:
-            logger.error("No user UID found in job metadata")
-            raise ValueError("No user UID found in job metadata")
-        
-        logger.debug(f"Generating fresh auth headers for user: {user_uid}")
-        
-        auth_headers = generate_fresh_auth_headers(job.meta)
-        
-        # Extract folder from metadata if present
-        folder = job.meta.get('X-Folder', None)
-        logger.debug(f"Job meta: {job.meta}")
-        logger.debug(f"Extracted folder from metadata: {folder}")
-        if folder:
-            files['folder'] = (None, folder)  # Add folder as form field
-            logger.debug(f"Uploading to folder: {folder}")
-        else:
-            logger.debug("No folder found in job metadata")
+    upload_umbrel_url = umbrel_url + '/api/upload'
+    
+    # Increase timeout significantly for large files
+    # For a 5GB file at 10MB/s, we need ~500 seconds, so use 1 hour to be safe
+    timeout = 3600  # 1 hour timeout
+    logger.debug(f"Using timeout of {timeout} seconds for upload")
+    
+    response = requests.post(upload_umbrel_url, data=monitor, headers=auth_headers, timeout=timeout)
+    response.raise_for_status()
 
-        logger.debug(f"Uploading with fresh headers: {[k for k in auth_headers.keys()]}")  # Log header keys only
-
-        upload_umbrel_url = umbrel_url + '/api/upload'
-        response = requests.post(upload_umbrel_url, files=files, headers=auth_headers, timeout=300)
-        response.raise_for_status()
-
-        response_data = response.json()
-        logger.debug(f"Umbrel upload response: {response_data}")
+    response_data = response.json()
+    logger.debug(f"Umbrel upload response: {response_data}")
 
     logger.debug(f"Successfully uploaded video to Umbrel: {compressed_file}")
     os.remove(compressed_file)

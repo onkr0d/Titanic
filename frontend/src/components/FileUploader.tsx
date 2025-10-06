@@ -55,6 +55,7 @@ const FileUploader = () => {
     }, []);
 
     const isValidVideoFile = (file: File) => {
+        console.log('isValidVideoFile', file.type);
         return file.type.startsWith('video/');
     };
 
@@ -199,7 +200,7 @@ const FileUploader = () => {
                         ref={fileInputRef}
                         type="file"
                         multiple
-                        accept="video/*"
+                        accept="video/*,.mkv" // thanks guys https://stackoverflow.com/questions/56454681/why-is-no-file-type-returned-when-adding-an-mkv-file-to-a-file-input
                         className="hidden"
                         onChange={(e) => handleFiles(Array.from(e.target.files || []))}
                     />

@@ -45,6 +45,7 @@ pyOpenSSL==25.0.0
 pyparsing==3.2.3
 Quart==0.20.0
 quart-cors==0.8.0
+aiofiles==24.1.0
 redis==6.1.0
 requests==2.32.3
 requests-toolbelt==1.0.0

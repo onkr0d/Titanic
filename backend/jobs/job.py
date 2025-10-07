@@ -1,3 +1,4 @@
+import requests
 import time
 import ffmpeg
 import logging
@@ -8,7 +9,9 @@ import subprocess
 import random
 import functools
 import firebase_admin
+import shutil
 from firebase_admin import credentials
+from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 
 # This configures logging for any process that imports this module.
 # It's safe to call here because logging.basicConfig() does nothing
@@ -115,6 +118,7 @@ def get_audio_streams(input_file: str) -> list:
         logger.error(f"Unexpected error getting audio streams for {input_file}: {e}")
         return []
 
+# TODO: Might need to normalize audio streams as well...
 def process_audio_with_rnnoise(input_file: str, output_file: str) -> str:
     """
     Mix the 2nd audio stream (mic, index 1) with the 1st stream (system/game) 
@@ -241,15 +245,20 @@ def compress_video(input_file: str) -> str:
         
         # If we processed audio, the source_file is already the processed one
         # Just move it to the output location
-        import shutil
         if source_file != output_file:
             shutil.move(source_file, output_file)
         logger.debug(f"Moved processed video to compressed directory: {output_file}")
         
         # Clean up original if different from source
-        if audio_processed_file and os.path.exists(input_file):
-            os.remove(input_file)
-            logger.debug(f"Removed original file: {input_file}")
+        # Use try/except to avoid race condition (TOCTOU) with os.path.exists
+        if audio_processed_file and input_file != source_file:
+            try:
+                os.remove(input_file)
+                logger.debug(f"Removed original file: {input_file}")
+            except FileNotFoundError:
+                logger.debug(f"Original file already removed: {input_file}")
+            except Exception as e:
+                logger.warning(f"Error removing original file: {e}")
         
         return output_file
     
@@ -293,18 +302,26 @@ def compress_video(input_file: str) -> str:
         ).run()
     
     # Clean up temporary and original files
-    if audio_processed_file and os.path.exists(source_file) and source_file != input_file:
-        os.remove(source_file)
-        logger.debug(f"Removed temporary audio-processed file: {source_file}")
+    # Use try/except to avoid race condition (TOCTOU) with os.path.exists
+    if audio_processed_file and source_file != input_file:
+        try:
+            os.remove(source_file)
+            logger.debug(f"Removed temporary audio-processed file: {source_file}")
+        except FileNotFoundError:
+            logger.debug(f"Temporary file already removed: {source_file}")
+        except Exception as e:
+            logger.warning(f"Error removing temporary file: {e}")
     
-    if os.path.exists(input_file):
+    # Remove original input file
+    try:
         os.remove(input_file)
         logger.debug(f"Removed original file: {input_file}")
+    except FileNotFoundError:
+        logger.debug(f"Original file already removed: {input_file}")
+    except Exception as e:
+        logger.warning(f"Error removing original file: {e}")
     
     return output_file
-
-import requests
-import os
 
 def retry_with_exponential_backoff(
     max_retries=5,
@@ -432,49 +449,63 @@ def upload_video_to_umbrel(input_file=None):
     
     # Build the multipart form data manually to avoid memory issues
     # For large files, we need to stream the upload instead of loading into memory
-    from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
+    # Keep file open throughout the entire upload process
+    file_handle = open(compressed_file, 'rb')
     
-    fields = {
-        'file': (os.path.basename(compressed_file), open(compressed_file, 'rb'), 'video/mp4')
-    }
-    
-    if folder:
-        fields['folder'] = folder
-        logger.debug(f"Uploading to folder: {folder}")
-    else:
-        logger.debug("No folder found in job metadata")
-    
-    # Create multipart encoder for streaming upload
-    encoder = MultipartEncoder(fields=fields)
-    
-    # Monitor upload progress
-    total_size = encoder.len
-    logger.debug(f"Total upload size: {total_size / (1024*1024*1024):.2f} GB")
-    
-    def monitor_callback(monitor):
-        progress = (monitor.bytes_read / total_size) * 100
-        if int(progress) % 10 == 0:  # Log every 10%
-            logger.debug(f"Upload progress: {progress:.1f}% ({monitor.bytes_read / (1024*1024):.1f} MB / {total_size / (1024*1024):.1f} MB)")
-    
-    monitor = MultipartEncoderMonitor(encoder, monitor_callback)
-    
-    auth_headers['Content-Type'] = monitor.content_type
-    logger.debug(f"Uploading with fresh headers: {[k for k in auth_headers.keys()]}")  # Log header keys only
+    try:
+        fields = {
+            'file': (os.path.basename(compressed_file), file_handle, 'video/mp4')
+        }
 
-    upload_umbrel_url = umbrel_url + '/api/upload'
-    
-    # Increase timeout significantly for large files
-    # For a 5GB file at 10MB/s, we need ~500 seconds, so use 1 hour to be safe
-    timeout = 3600  # 1 hour timeout
-    logger.debug(f"Using timeout of {timeout} seconds for upload")
-    
-    response = requests.post(upload_umbrel_url, data=monitor, headers=auth_headers, timeout=timeout)
-    response.raise_for_status()
+        if folder:
+            fields['folder'] = folder
+            logger.debug(f"Uploading to folder: {folder}")
+        else:
+            logger.debug("No folder found in job metadata")
+        
+        # Create multipart encoder for streaming upload
+        encoder = MultipartEncoder(fields=fields)
+        
+        # Monitor upload progress
+        total_size = encoder.len
+        logger.debug(f"Total upload size: {total_size / (1024*1024*1024):.2f} GB")
+        
+        def monitor_callback(monitor):
+            progress = (monitor.bytes_read / total_size) * 100
+            if int(progress) % 10 == 0:  # Log every 10%
+                logger.debug(f"Upload progress: {progress:.1f}% ({monitor.bytes_read / (1024*1024):.1f} MB / {total_size / (1024*1024):.1f} MB)")
+        
+        monitor = MultipartEncoderMonitor(encoder, monitor_callback)
+        
+        auth_headers['Content-Type'] = monitor.content_type
+        logger.debug(f"Uploading with fresh headers: {[k for k in auth_headers.keys()]}")  # Log header keys only
 
-    response_data = response.json()
-    logger.debug(f"Umbrel upload response: {response_data}")
+        upload_umbrel_url = umbrel_url + '/api/upload'
+        
+        # Increase timeout significantly for large files
+        # For a 5GB file at 10MB/s, we need ~500 seconds, so use 1 hour to be safe
+        timeout = 3600  # 1 hour timeout
+        logger.debug(f"Using timeout of {timeout} seconds for upload")
+        
+        response = requests.post(upload_umbrel_url, data=monitor, headers=auth_headers, timeout=timeout)
+        response.raise_for_status()
 
-    logger.debug(f"Successfully uploaded video to Umbrel: {compressed_file}")
-    os.remove(compressed_file)
-    logger.debug(f"Removed compressed file: {compressed_file}")
+        response_data = response.json()
+        logger.debug(f"Umbrel upload response: {response_data}")
+
+        logger.debug(f"Successfully uploaded video to Umbrel: {compressed_file}")
+    finally:
+        # Always close the file handle
+        file_handle.close()
+        logger.debug("Upload file handle closed")
+    
+    # Remove the compressed file after successful upload
+    # Use try/except to avoid race condition
+    try:
+        os.remove(compressed_file)
+        logger.debug(f"Removed compressed file: {compressed_file}")
+    except FileNotFoundError:
+        logger.debug(f"Compressed file already removed: {compressed_file}")
+    except Exception as e:
+        logger.warning(f"Error removing compressed file: {e}")
     

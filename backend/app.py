@@ -8,6 +8,7 @@ from quart_cors import cors
 from redis import Redis
 from rq import Queue
 import os
+from quart import abort
 from werkzeug.utils import secure_filename
 import logging
 from jobs.job import compress_video, upload_video_to_umbrel
@@ -16,6 +17,7 @@ from firebase_admin import credentials, auth, app_check
 from functools import wraps
 import shutil
 import jwt
+import aiofiles
 
 IS_DEV = os.environ.get('IS_DEV', 'false').lower() == 'true'
 logger = logging.getLogger(__name__)
@@ -114,7 +116,6 @@ async def verify_app_check() -> None:
         # If verify_token() succeeds, okay to continue to route handler.
     except (ValueError, jwt.exceptions.DecodeError):
         logger.error(f"App Check token verification failed: {app_check_token}")
-        from quart import abort
         abort(401)
     
 def allowed_file(filename):
@@ -190,36 +191,33 @@ async def upload_video():
         
         logger.debug(f"Streaming file to disk: {filepath}")
         
-        # Stream file to disk in chunks
-        # Note: file.read() is synchronous in Quart, but the file has already been 
-        # streamed to a temp file by Quart's async multipart parser
+        # Stream file to disk in chunks using async I/O to prevent blocking the event loop
         # Using 8MB chunks for better performance with large files (per best practices)
         chunk_size = 8 * 1024 * 1024  # 8MB chunks - optimal for large files
         bytes_written = 0
         
-        try:
-            with open(filepath, 'wb') as f:
-                while True:
-                    # Read chunk synchronously from the temp file
-                    chunk = file.read(chunk_size)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    bytes_written += len(chunk)
-                    
-                    # Log progress every 500MB
-                    if bytes_written % (500 * 1024 * 1024) < chunk_size:
-                        logger.debug(f"Written {bytes_written / (1024*1024):.1f} MB")
-            
-            logger.debug(f"File saved successfully: {bytes_written / (1024*1024):.1f} MB total")
-        finally:
-            # Explicitly close and clean up the temp file to free resources immediately
-            # This prevents temp files from accumulating and slowing down subsequent requests
-            try:
-                file.close()
-                logger.debug("Temp file handle closed")
-            except Exception as e:
-                logger.warning(f"Error closing temp file: {e}")
+        # Use aiofiles for non-blocking async file operations
+        async with aiofiles.open(filepath, 'wb') as f:
+            while True:
+                # Read chunk synchronously from Quart's temp file
+                # Note: file.read() is sync but Quart has already streamed to temp disk
+                chunk = file.read(chunk_size)
+                if not chunk:
+                    break
+                # Write asynchronously to prevent blocking event loop
+                await f.write(chunk)
+                bytes_written += len(chunk)
+                
+                # Log progress every 500MB
+                if bytes_written % (500 * 1024 * 1024) < chunk_size:
+                    logger.debug(f"Written {bytes_written / (1024*1024):.1f} MB")
+        
+        logger.debug(f"File saved successfully: {bytes_written / (1024*1024):.1f} MB total")
+        
+        # Close Quart's temp file handle
+        # No need for try/except - if file doesn't exist, we wouldn't have reached here
+        file.close()
+        logger.debug("Temp file handle closed")
         
         # Enqueue the video processing job only if compression is enabled
         # Store user UID instead of raw Firebase ID token

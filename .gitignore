@@ -26,3 +26,4 @@ node_modules/
 # Python cache
 *.egg-info/
 .mypy_cache/
+/backend/videos

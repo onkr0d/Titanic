@@ -303,14 +303,14 @@ def compress_video(input_file: str) -> str:
     
     # Clean up temporary and original files
     # Use try/except to avoid race condition (TOCTOU) with os.path.exists
-    if audio_processed_file and source_file != input_file:
-        try:
+    try:
+        if audio_processed_file and source_file != input_file:
             os.remove(source_file)
             logger.debug(f"Removed temporary audio-processed file: {source_file}")
-        except FileNotFoundError:
-            logger.debug(f"Temporary file already removed: {source_file}")
-        except Exception as e:
-            logger.warning(f"Error removing temporary file: {e}")
+    except FileNotFoundError:
+        logger.debug(f"Temporary file already removed: {source_file}")
+    except Exception as e:
+        logger.warning(f"Error removing temporary file: {e}")
     
     # Remove original input file
     try:

@@ -461,6 +461,7 @@ def upload_video_to_umbrel(input_file=None):
     # Build the multipart form data manually to avoid memory issues
     # For large files, we need to stream the upload instead of loading into memory
     # Keep file open throughout the entire upload process
+    file_handle = None
     try:
         file_handle = open(compressed_file, 'rb')
         fields = {
@@ -509,9 +510,9 @@ def upload_video_to_umbrel(input_file=None):
 
         logger.debug(f"Successfully uploaded video to Umbrel: {compressed_file}")
     finally:
-        # Always close the file handle
-        file_handle.close()
-        logger.debug("Upload file handle closed")
+        if file_handle is not None:
+            file_handle.close()
+            logger.debug("Upload file handle closed")
     
     # Remove the compressed file after successful upload
     # Use try/except to avoid race condition

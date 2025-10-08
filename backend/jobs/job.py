@@ -135,8 +135,8 @@ def process_audio_with_rnnoise(input_file: str, output_file: str) -> str:
         if not audio_streams:
             logger.warning("No audio streams; skipping audio processing")
             return None
-        if len(audio_streams) < 2:
-            logger.warning("Fewer than 2 audio streams; skipping audio mixing")
+        if len(audio_streams) != 2:
+            logger.warning("Not exactly 2 audio streams; skipping audio mixing")
             return None
 
         # Check if RNNoise is enabled via environment variable
@@ -270,13 +270,18 @@ def compress_video(input_file: str) -> str:
         cmd = [
             'ffmpeg',
             '-i', source_file,
-            '-vcodec', 'libx265',
+            "-map", "0",
+            '-c:v', 'libx265', # set codec for video stream
             '-crf', '22',
             '-preset', 'medium',
             '-c:a', 'copy',  # Copy already-processed audio
-            '-vtag', 'hvc1',  # Better support for Apple devices
+            '-tag:v', 'hvc1',  # Better support for Apple devices
             '-movflags', '+faststart',  # Optimize for streaming
             '-map_metadata', '0',  # Preserve original metadata
+            # Preserve audio stream dispositions (make first audio track default)
+            '-disposition:a:0', 'default',  # Mixed track is default
+            '-disposition:a:1', '0',  # System track not default
+            '-disposition:a:2', '0',  # Mic track not default
             '-y',  # Overwrite output
             output_file
         ]
@@ -295,7 +300,13 @@ def compress_video(input_file: str) -> str:
             vcodec='libx265',
             crf=22,
             preset='medium',
-            **{'c:a': 'copy'},
+            **{
+                'c:a': 'copy',
+                'map': '0',  # Copy all streams
+                'disposition:a:0': 'default',  # Mixed track is default
+                'disposition:a:1': '0',  # System track not default
+                'disposition:a:2': '0',  # Mic track not default
+            },
             vtag='hvc1',
             movflags='+faststart',
             map_metadata=0
@@ -450,9 +461,8 @@ def upload_video_to_umbrel(input_file=None):
     # Build the multipart form data manually to avoid memory issues
     # For large files, we need to stream the upload instead of loading into memory
     # Keep file open throughout the entire upload process
-    file_handle = open(compressed_file, 'rb')
-    
     try:
+        file_handle = open(compressed_file, 'rb')
         fields = {
             'file': (os.path.basename(compressed_file), file_handle, 'video/mp4')
         }
@@ -470,9 +480,13 @@ def upload_video_to_umbrel(input_file=None):
         total_size = encoder.len
         logger.debug(f"Total upload size: {total_size / (1024*1024*1024):.2f} GB")
         
+        # Only log progress when we cross a new 10% threshold to avoid spamming logs
+        last_logged_percent = {'value': -1}
         def monitor_callback(monitor):
             progress = (monitor.bytes_read / total_size) * 100
-            if int(progress) % 10 == 0:  # Log every 10%
+            current_percent = int(progress // 10) * 10  # 0, 10, 20, ..., 100
+            if current_percent != last_logged_percent['value']:
+                last_logged_percent['value'] = current_percent
                 logger.debug(f"Upload progress: {progress:.1f}% ({monitor.bytes_read / (1024*1024):.1f} MB / {total_size / (1024*1024):.1f} MB)")
         
         monitor = MultipartEncoderMonitor(encoder, monitor_callback)

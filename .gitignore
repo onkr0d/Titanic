@@ -1,5 +1,4 @@
 backend/admin-sdk-cred.json
-backend/dump.rdb
 backend/models/
 .env
 
@@ -27,3 +26,4 @@ node_modules/
 *.egg-info/
 .mypy_cache/
 /backend/videos
+/titanic/Clips

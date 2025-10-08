@@ -55,8 +55,8 @@ services:
       - ./titanic/Cargo.lock:/app/Cargo.lock
       # Mount target directory to persist compiled dependencies
       - titanic_dev_cache:/app/target
-      # Mount mock Clips directory for development (PLEX_MEDIA_PATH=/downloads)
-      - ./umbrel/Downloads:/downloads
+      # Mount Clips directory for development (PLEX_MEDIA_PATH=/downloads)
+      - ./titanic/Clips:/downloads/Clips
     networks:
       - titanic_dev_network
     # Healthcheck is disabled for cargo-watch, as the server might restart frequently.

@@ -266,6 +266,10 @@ def compress_video(input_file: str) -> str:
     
     # Step 3: Compress video (audio already processed, so copy audio streams)
     try:
+        audio_streams = get_audio_streams(source_file)
+        num_audio_streams = len(audio_streams)
+        logger.debug(f"Source file has {num_audio_streams} audio stream(s)")
+        
         # Use subprocess for more control over ffmpeg
         cmd = [
             'ffmpeg',
@@ -278,13 +282,21 @@ def compress_video(input_file: str) -> str:
             '-tag:v', 'hvc1',  # Better support for Apple devices
             '-movflags', '+faststart',  # Optimize for streaming
             '-map_metadata', '0',  # Preserve original metadata
-            # Preserve audio stream dispositions (make first audio track default)
-            '-disposition:a:0', 'default',  # Mixed track is default
-            '-disposition:a:1', '0',  # System track not default
-            '-disposition:a:2', '0',  # Mic track not default
-            '-y',  # Overwrite output
-            output_file
         ]
+        
+        # set dispositions only if there are 3 audio streams
+        if num_audio_streams == 3:
+            # Preserve audio stream dispositions (make first audio track default)
+            cmd.extend([
+                '-disposition:a:0', 'default',  # Mixed track is default
+                '-disposition:a:1', '0',  # System track not default
+                '-disposition:a:2', '0',  # Mic track not default
+            ])
+        elif num_audio_streams > 0:
+            # Just make the first audio stream default
+            cmd.extend(['-disposition:a:0', 'default'])
+        
+        cmd.extend(['-y', output_file])  # Overwrite output
         
         logger.debug(f"Running video compression command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -295,18 +307,30 @@ def compress_video(input_file: str) -> str:
         logger.error(f"FFmpeg stderr: {e.stderr}")
         # Fall back to original method if subprocess fails
         logger.info("Falling back to ffmpeg-python library")
+        
+        # Build ffmpeg-python options based on number of audio streams
+        output_options = {
+            'c:a': 'copy',
+            'map': '0',  # Copy all streams
+        }
+        
+        if num_audio_streams == 3:
+            # Set specific dispositions for 3-stream audio
+            output_options.update({
+                'disposition:a:0': 'default',  # Mixed track is default
+                'disposition:a:1': '0',  # System track not default
+                'disposition:a:2': '0',  # Mic track not default
+            })
+        elif num_audio_streams > 0:
+            # Just make the first audio stream default
+            output_options['disposition:a:0'] = 'default'
+        
         ffmpeg.input(source_file).output(
             output_file,
             vcodec='libx265',
             crf=22,
             preset='medium',
-            **{
-                'c:a': 'copy',
-                'map': '0',  # Copy all streams
-                'disposition:a:0': 'default',  # Mixed track is default
-                'disposition:a:1': '0',  # System track not default
-                'disposition:a:2': '0',  # Mic track not default
-            },
+            **output_options,
             vtag='hvc1',
             movflags='+faststart',
             map_metadata=0

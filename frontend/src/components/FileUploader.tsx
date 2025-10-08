@@ -283,8 +283,8 @@ const FileUploader = () => {
                                             <Tooltip
                                                 content={
                                                     shouldCompress
-                                                        ? "Smart processing enabled"
-                                                        : "Compression disabled: clip will appear in Plex as is"
+                                                        ? "Smart processing on"
+                                                        : "Smart processing off: clip will appear in Plex as is"
                                                 }
                                             >
                                                 <Switch

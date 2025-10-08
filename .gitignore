@@ -1,5 +1,6 @@
 backend/admin-sdk-cred.json
 backend/dump.rdb
+backend/models/
 .env
 
 # umbrel icons
@@ -25,3 +26,5 @@ node_modules/
 # Python cache
 *.egg-info/
 .mypy_cache/
+/backend/videos
+/titanic/Clips

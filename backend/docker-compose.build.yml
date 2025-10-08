@@ -10,6 +10,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/admin-sdk-cred
+      - FIREBASE_API_KEY=${FIREBASE_API_KEY}
     secrets:
       - admin-sdk-cred
     networks:

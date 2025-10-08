@@ -55,7 +55,7 @@ const FileUploader = () => {
     }, []);
 
     const isValidVideoFile = (file: File) => {
-        return file.type.startsWith('video/');
+        return file.type.startsWith('video/') || file.name.endsWith('.mkv'); // unfortunate but, https://stackoverflow.com/questions/56454681/why-is-no-file-type-returned-when-adding-an-mkv-file-to-a-file-input
     };
 
     const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
@@ -199,7 +199,7 @@ const FileUploader = () => {
                         ref={fileInputRef}
                         type="file"
                         multiple
-                        accept="video/*"
+                        accept="video/*,.mkv" // thanks guys https://stackoverflow.com/questions/56454681/why-is-no-file-type-returned-when-adding-an-mkv-file-to-a-file-input
                         className="hidden"
                         onChange={(e) => handleFiles(Array.from(e.target.files || []))}
                     />
@@ -283,8 +283,8 @@ const FileUploader = () => {
                                             <Tooltip
                                                 content={
                                                     shouldCompress
-                                                        ? "Smart compression enabled"
-                                                        : "Compression disabled: clip will appear in Plex as is"
+                                                        ? "Smart processing on"
+                                                        : "Smart processing off: clip will appear in Plex as is"
                                                 }
                                             >
                                                 <Switch

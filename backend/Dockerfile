@@ -30,7 +30,13 @@ WORKDIR /app
 RUN apk add --no-cache \
     ffmpeg \
     redis \
-    curl
+    curl \
+    wget
+
+# Download RNNoise model for audio processing
+RUN mkdir -p /app/models && \
+    wget -O /app/models/rnnoise-model.rnnn \
+    https://github.com/GregorR/rnnoise-models/raw/master/somnolent-hogwash-2018-09-01/sh.rnnn
 
 # Copy installed Python packages from builder
 COPY --from=builder /install /usr/local

@@ -9,17 +9,14 @@ charset-normalizer==3.4.2
 click==8.2.0
 cryptography==44.0.3
 ffmpeg-python==0.2.0
-firebase-admin==6.8.0 # https://github.com/firebase/firebase-admin-python/issues/803 wtf
-Flask==3.1.1
-flask-cors==5.0.1
+firebase-admin==7.0.0
 future==1.0.0
-google-api-core==2.25.0rc1
-google-api-python-client==2.169.0
+google-api-core==2.25.2
 google-auth==2.40.1
 google-auth-httplib2==0.2.0
 google-cloud-core==2.4.3
-google-cloud-firestore==2.20.2
-google-cloud-storage==3.1.0
+google-cloud-firestore==2.21.0
+google-cloud-storage==3.4.0
 google-crc32c==1.7.1
 google-resumable-media==2.7.2
 googleapis-common-protos==1.70.0
@@ -46,8 +43,12 @@ PyJWT==2.10.1
 pylsqpack==0.3.22
 pyOpenSSL==25.0.0
 pyparsing==3.2.3
+Quart==0.20.0
+quart-cors==0.8.0
+aiofiles==24.1.0
 redis==6.1.0
 requests==2.32.3
+requests-toolbelt==1.0.0
 rq==2.3.3
 rsa==4.9.1
 service-identity==24.2.0

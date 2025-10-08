@@ -18,10 +18,21 @@ localhost:443 {
 compress.ivan.boston {
 	encode gzip
 
+	# Allow large file uploads (10GB)
+	# request_body {
+	# 	max_size 10GB
+	# }
+
 	# Log all requests
 	log {
 		output stdout
 		format console
+		# format filter {
+		# 	request>headers>Cookie cookie {
+		# 		replace X-Firebase-AppCheck REDACTED
+
+		# 	}
+		# }
 	}
 
 	@health {

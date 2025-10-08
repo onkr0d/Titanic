@@ -23,6 +23,8 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/admin-sdk-cred
       - IS_DEV=${IS_DEV:-true}
       - UMBREL_SERVER_URL=http://umbrel:3029
+      - FIREBASE_API_KEY=${FIREBASE_API_KEY}
+      - ENABLE_RNNOISE=${ENABLE_RNNOISE:-true}  # Set to 'true' to enable RNNoise denoising on mic track
     secrets:
       - admin-sdk-cred
     networks:
@@ -53,7 +55,8 @@ services:
       - ./titanic/Cargo.lock:/app/Cargo.lock
       # Mount target directory to persist compiled dependencies
       - titanic_dev_cache:/app/target
-      - ./titanic/media:/data/media
+      # Mount Clips directory for development (PLEX_MEDIA_PATH=/downloads)
+      - ./titanic/Clips:/downloads/Clips
     networks:
       - titanic_dev_network
     # Healthcheck is disabled for cargo-watch, as the server might restart frequently.

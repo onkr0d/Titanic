@@ -118,25 +118,21 @@ def get_audio_streams(input_file: str) -> list:
         logger.error(f"Unexpected error getting audio streams for {input_file}: {e}")
         return []
 
-# TODO: Might need to normalize audio streams as well...
 def process_audio_with_rnnoise(input_file: str, output_file: str) -> str:
     """
-    Mix the 2nd audio stream (mic, index 1) with the 1st stream (system/game) 
-    to create a new DEFAULT track, and preserve both original audio streams untouched.
-    
-    If ENABLE_RNNOISE env var is set to 'true', applies RNNoise denoising to the mic
-    before mixing. Otherwise, mixes the raw mic audio.
-    
-    Video is copied through.
+    Build a new DEFAULT mix from system (0:a:0) + mic (0:a:1 denoised),
+    run EBU R128 (loudnorm) TWO-PASS on the mixed track,
+    and keep both originals untouched. Video is copied.
     """
     try:
-        # Probe audio streams
         audio_streams = get_audio_streams(input_file)
         if not audio_streams:
             logger.warning("No audio streams; skipping audio processing")
             return None
-        if len(audio_streams) != 2:
-            logger.warning("Not exactly 2 audio streams; skipping audio mixing")
+
+        # We expect exactly two inputs from NVIDIA Instant Replay: 0:a:0 system, 0:a:1 mic.
+        if len(audio_streams) < 2:
+            logger.warning("Fewer than 2 audio streams; skipping audio mixing")
             return None
 
         # Check if RNNoise is enabled via environment variable
@@ -144,50 +140,101 @@ def process_audio_with_rnnoise(input_file: str, output_file: str) -> str:
         rnnoise_model = "/app/models/rnnoise-model.rnnn"
         have_model = os.path.exists(rnnoise_model)
 
-        # Build filter graph:
-        # Step 1: Process mic audio (with or without RNNoise)
-        # Step 2: Mix processed mic with system audio
+        # Determine mic processing filter
         if enable_rnnoise and have_model:
             logger.info("RNNoise enabled - applying denoising to mic track before mixing")
-            # Apply RNNoise denoising to mic track
-            denoise = f"[0:a:1]arnndn=m={rnnoise_model}[mic];"
+            mic_filter = f"arnndn=m={rnnoise_model},aformat=channel_layouts=stereo"
         else:
             if enable_rnnoise and not have_model:
                 logger.warning("RNNoise enabled but model not found at %s; using raw mic", rnnoise_model)
             else:
                 logger.info("RNNoise disabled - mixing raw mic with system audio")
-            # Pass mic through without denoising
-            denoise = f"[0:a:1]anull[mic];"
+            # Pass mic through without denoising, but ensure stereo
+            mic_filter = "aformat=channel_layouts=stereo"
 
-        # Mix system audio with (possibly denoised) mic audio
+        # ---- Pass 0: create a temp file with the MIX ONLY (to measure loudness) ----
+        # We'll generate the mixed track (system + denoised mic) to a temporary AAC file (no originals yet)
+        import tempfile
+        temp_dir = tempfile.gettempdir()
+        mix_wav = os.path.join(temp_dir, "titanic_mix_for_measure.wav")
+
+        # Filter graph: denoise mic -> mix with system
         filter_complex = (
-            denoise +
-            "[0:a:0][mic]amix=inputs=2:duration=longest:normalize=0[a_mix]"
+            f"[0:a:1]{mic_filter}[mic];"
+            f"[0:a:0][mic]amix=inputs=2:duration=longest:normalize=0,aformat=channel_layouts=stereo[a_mix]"  # keep headroom; no auto 1/n scaling
         )
 
-        # Assemble ffmpeg command
-        cmd = [
+        cmd_mix = [
             "ffmpeg", "-y",
             "-i", input_file,
             "-filter_complex", filter_complex,
+            "-map", "[a_mix]", "-c:a", "pcm_s16le",  # PCM for accurate measurement
+            mix_wav
+        ]
+        logger.debug("FFmpeg (build mix for measurement): %s", " ".join(cmd_mix))
+        subprocess.run(cmd_mix, capture_output=True, text=True, check=True)
 
-            # Video: passthrough
+        # ---- Pass 1 (measure): EBU R128 on the mixed track (no output media, print JSON) ----
+        # Typical streaming targets: I=-16, TP=-1.5, LRA=11 (tweak to taste).
+        # We measure first to get accurate correction values.
+        measure_cmd = [
+            "ffmpeg", "-hide_banner", "-nostats",
+            "-i", mix_wav,
+            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+            "-f", "null", "-"  # no file written; stats to stderr
+        ]
+        logger.debug("FFmpeg (loudnorm measure): %s", " ".join(measure_cmd))
+        measure_run = subprocess.run(measure_cmd, capture_output=True, text=True, check=True)
+        # loudnorm stats print to stderr; parse JSON block:
+        import re, json
+        m = re.search(r"\{[\s\S]*?\}\s*$", measure_run.stderr)
+        if not m:
+            logger.error("Failed to capture loudnorm measurement JSON")
+            return None
+        stats = json.loads(m.group(0))
+
+        # ---- Pass 2 (apply): rebuild full file with 3 tracks, loudnorm on the MIX ONLY ----
+        # We’ll redo the mix and apply loudnorm with measured_* values,
+        # then include raw system & raw mic as separate tracks.
+        # Keep video copied, set dispositions & metadata.
+        ln = (
+            f"loudnorm=I=-16:TP=-1.5:LRA=11:"
+            f"measured_I={stats['input_i']}:measured_TP={stats['input_tp']}:"
+            f"measured_LRA={stats['input_lra']}:measured_thresh={stats['input_thresh']}:"
+            f"offset={stats['target_offset']}:linear=true:print_format=summary"
+        )
+
+        filter_complex_full = (
+            f"[0:a:1]{mic_filter}[mic];"
+            f"[0:a:0][mic]amix=inputs=2:duration=longest:normalize=0,aformat=channel_layouts=stereo[a_mix_raw];"
+            f"[a_mix_raw]{ln}[a_mix]"
+        )
+
+        # Set metadata title based on whether RNNoise was applied
+        mic_description = "denoised mic" if (enable_rnnoise and have_model) else "mic"
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", input_file,
+            "-filter_complex", filter_complex_full,
+
+            # Video passthrough
             "-map", "0:v:0", "-c:v", "copy",
 
-            # 1) New default mixed track (AAC)
+            # 1) NEW default loudness-normalized mixed track
             "-map", "[a_mix]", "-c:a:0", "aac", "-b:a:0", "256k",
-            "-metadata:s:a:0", "title=Default mix (system + denoised mic)",
+            "-metadata:s:a:0", f"title=Default mix (system + {mic_description}, EBU R128)",
             "-metadata:s:a:0", "language=eng",
             "-disposition:a:0", "default",
 
-            # 2) Original system audio (copy)
-            "-map", "0:a:0", "-c:a:1", "copy",
+            # 2) System only (raw) — optional map (won't fail if absent)
+            "-map", "0:a:0?", "-c:a:1", "copy",
             "-metadata:s:a:1", "title=System only (raw)",
             "-metadata:s:a:1", "language=eng",
             "-disposition:a:1", "0",
 
-            # 3) Original mic audio (copy)
-            "-map", "0:a:1", "-c:a:2", "copy",
+            # 3) Mic only (raw)
+            "-map", "0:a:1?", "-c:a:2", "copy",
             "-metadata:s:a:2", "title=Mic only (raw)",
             "-metadata:s:a:2", "language=eng",
             "-disposition:a:2", "0",
@@ -196,9 +243,16 @@ def process_audio_with_rnnoise(input_file: str, output_file: str) -> str:
             output_file,
         ]
 
-        logger.debug("Running FFmpeg: %s", " ".join(cmd))
+        logger.debug("FFmpeg (final build w/ loudnorm): %s", " ".join(cmd))
         subprocess.run(cmd, capture_output=True, text=True, check=True)
         logger.info("Audio processing complete: %s", output_file)
+
+        # cleanup temp
+        try:
+            os.remove(mix_wav)
+        except Exception:
+            pass
+
         return output_file
 
     except subprocess.CalledProcessError as e:
@@ -220,142 +274,93 @@ def is_h265_video(input_file: str) -> bool:
         return codec in ['hevc', 'h265', 'h.265']
     return False
 
-# assume safe path already!
 def compress_video(input_file: str) -> str:
-    # Get the base filename without the directory
     filename = os.path.basename(input_file)
-    # Create output path in the compressed directory
     output_file = os.path.join(os.path.dirname(os.path.dirname(input_file)), 'compressed', filename)
-    
+
     logger.debug(f"Starting compression check: {input_file} -> {output_file}")
-    
-    # Step 1: Process audio with RNNoise and dynamic range compression
-    # Create temporary file for audio-processed video
+
     temp_audio_processed = os.path.join(os.path.dirname(input_file), f"audio_processed_{filename}")
-    
     audio_processed_file = process_audio_with_rnnoise(input_file, temp_audio_processed)
-    
-    # Determine which file to use for video compression
-    # If audio processing succeeded, use the audio-processed file; otherwise, use original
     source_file = audio_processed_file if audio_processed_file else input_file
-    
-    # Step 2: Check if video is already H.265
+
     if is_h265_video(source_file):
-        logger.info(f"Video is already H.265, skipping video compression")
-        
-        # If we processed audio, the source_file is already the processed one
-        # Just move it to the output location
+        logger.info("Video is already H.265, skipping video compression")
         if source_file != output_file:
             shutil.move(source_file, output_file)
-        logger.debug(f"Moved processed video to compressed directory: {output_file}")
-        
-        # Clean up original if different from source
-        # Use try/except to avoid race condition (TOCTOU) with os.path.exists
         try:
             if audio_processed_file and input_file != source_file:
                 os.remove(input_file)
-                logger.debug(f"Removed original file: {input_file}")
         except FileNotFoundError:
-            logger.debug(f"Original file already removed: {input_file}")
-        except Exception as e:
-            logger.warning(f"Error removing original file: {e}")
-        
+            pass
         return output_file
-    
-    logger.debug(f"Video is not H.265, proceeding with video compression")
-    
-    # Step 3: Compress video (audio already processed, so copy audio streams)
+
     try:
+        # Probe number of audio streams for disposition logic
         audio_streams = get_audio_streams(source_file)
         num_audio_streams = len(audio_streams)
         logger.debug(f"Source file has {num_audio_streams} audio stream(s)")
-        
-        # Use subprocess for more control over ffmpeg
+
         cmd = [
-            'ffmpeg',
-            '-i', source_file,
+            "ffmpeg", "-y",
+            "-i", source_file,
+
+            # keep everything (video + all audio + any subs) in order
             "-map", "0",
-            '-c:v', 'libx265', # set codec for video stream
-            '-crf', '22',
-            '-preset', 'medium',
-            '-c:a', 'copy',  # Copy already-processed audio
-            '-tag:v', 'hvc1',  # Better support for Apple devices
-            '-movflags', '+faststart',  # Optimize for streaming
-            '-map_metadata', '0',  # Preserve original metadata
+
+            # video re-encode
+            "-c:v", "libx265", "-crf", "22", "-preset", "medium", "-tag:v", "hvc1",
+
+            # copy audio/subs as-is
+            "-c:a", "copy",
+            "-c:s", "copy",
+
+            "-movflags", "+faststart",
+            "-map_metadata", "0",
         ]
-        
-        # set dispositions only if there are 3 audio streams
-        if num_audio_streams == 3:
-            # Preserve audio stream dispositions (make first audio track default)
-            cmd.extend([
-                '-disposition:a:0', 'default',  # Mixed track is default
-                '-disposition:a:1', '0',  # System track not default
-                '-disposition:a:2', '0',  # Mic track not default
-            ])
-        elif num_audio_streams > 0:
-            # Just make the first audio stream default
-            cmd.extend(['-disposition:a:0', 'default'])
-        
-        cmd.extend(['-y', output_file])  # Overwrite output
-        
-        logger.debug(f"Running video compression command: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+        # Make the first audio track default (this is our loudnorm'd mix)
+        if num_audio_streams >= 1:
+            cmd += ["-disposition:a:0", "default"]
+        # Clear others if present
+        if num_audio_streams >= 2:
+            cmd += ["-disposition:a:1", "0"]
+        if num_audio_streams >= 3:
+            cmd += ["-disposition:a:2", "0"]
+
+        cmd += [output_file]
+
+        logger.debug("FFmpeg (HEVC transcode): %s", " ".join(cmd))
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
         logger.debug(f"Video compression completed: {output_file}")
-        
+
     except subprocess.CalledProcessError as e:
-        logger.error(f"Video compression failed: {e}")
-        logger.error(f"FFmpeg stderr: {e.stderr}")
-        # Fall back to original method if subprocess fails
-        logger.info("Falling back to ffmpeg-python library")
-        
-        # Build ffmpeg-python options based on number of audio streams
-        output_options = {
-            'c:a': 'copy',
-            'map': '0',  # Copy all streams
-        }
-        
-        if num_audio_streams == 3:
-            # Set specific dispositions for 3-stream audio
-            output_options.update({
-                'disposition:a:0': 'default',  # Mixed track is default
-                'disposition:a:1': '0',  # System track not default
-                'disposition:a:2': '0',  # Mic track not default
-            })
-        elif num_audio_streams > 0:
-            # Just make the first audio stream default
-            output_options['disposition:a:0'] = 'default'
-        
+        logger.error("Video compression failed: %s", e)
+        logger.error("FFmpeg stderr: %s", e.stderr)
+        # Fallback with ffmpeg-python
+        out_opts = {'c:a': 'copy', 'map': '0'}
         ffmpeg.input(source_file).output(
             output_file,
             vcodec='libx265',
             crf=22,
             preset='medium',
-            **output_options,
+            **out_opts,
             vtag='hvc1',
             movflags='+faststart',
             map_metadata=0
         ).run()
-    
-    # Clean up temporary and original files
-    # Use try/except to avoid race condition (TOCTOU) with os.path.exists
+
+    # Cleanup temps/original
     try:
         if audio_processed_file and source_file != input_file:
             os.remove(source_file)
-            logger.debug(f"Removed temporary audio-processed file: {source_file}")
     except FileNotFoundError:
-        logger.debug(f"Temporary file already removed: {source_file}")
-    except Exception as e:
-        logger.warning(f"Error removing temporary file: {e}")
-    
-    # Remove original input file
+        pass
     try:
         os.remove(input_file)
-        logger.debug(f"Removed original file: {input_file}")
     except FileNotFoundError:
-        logger.debug(f"Original file already removed: {input_file}")
-    except Exception as e:
-        logger.warning(f"Error removing original file: {e}")
-    
+        pass
+
     return output_file
 
 def retry_with_exponential_backoff(

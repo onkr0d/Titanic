@@ -21,7 +21,7 @@ It's important to note that the Umbrel server will need to compile first, so it 
 ### Services
 - **Backend API:** Accessible at `http://localhost:6969`
 - **Umbrel Service:** Accessible at `http://localhost:3029`
-- **Hot-Reloading:** The Umbrel (Rust) service will automatically restart when you save changes to any file in `umbrel/src/`.
+- **Hot-Reloading:** The Umbrel (Rust) service will automatically restart when you save changes to any file in `titanic/src/`.
 
 ### Frontend
 

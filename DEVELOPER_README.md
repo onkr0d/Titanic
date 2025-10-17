@@ -39,7 +39,7 @@ firebase emulators:start
 
 The frontend will be available at `http://localhost:5173` and will connect to the backend services running in Docker.
 
-Now you can use the entire Titanic suit on your local machine.
+Now you can use the entire Titanic suite on your local machine.
 
 ## Production Deployment
 

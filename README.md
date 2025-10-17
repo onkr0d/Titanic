@@ -16,4 +16,4 @@ Due to the non-technical background of the user, I chose to design a system from
 Oh and also because I like it I have CD pipelines like everywhere :)
 
 ### Getting stated
-Finally, to get started run ``docker compose -f docker-compose.dev.yml -up --build -d`` from root and take a closer look [here](./DEVELOPER_README.md).
+Finally, to get started run ``docker compose -f docker-compose.dev.yml up --build -d`` from root and take a closer look [here](./DEVELOPER_README.md).

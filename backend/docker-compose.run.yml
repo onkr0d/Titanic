@@ -7,9 +7,9 @@ services:
       - ./videos:/app/videos
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/admin-sdk-cred
-      - UMBREL_SERVER_URL=http://100.97.35.4:3029 # tailsale ip
+      - UMBREL_SERVER_URL=http://umbrel:3029 # tailsale ip
       - FIREBASE_API_KEY=${FIREBASE_API_KEY}
-      - ENABLE_RNNOISE=${ENABLE_RNNOISE:-false}  # Set to 'true' to enable RNNoise denoising on mic track
+      - ENABLE_RNNOISE=${ENABLE_RNNOISE:-true}  # Set to 'true' to enable RNNoise denoising on mic track
     secrets:
       - admin-sdk-cred
     healthcheck:

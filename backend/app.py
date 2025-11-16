@@ -297,7 +297,7 @@ async def get_folders():
     try:
         logger.debug("Fetching folders from Umbrel server")
         # Build folders URL from base server URL
-        umbrel_base_url = os.environ.get('UMBREL_SERVER_URL', 'http://100.97.35.4:3029')
+        umbrel_base_url = os.environ.get('UMBREL_SERVER_URL', 'http://umbrel:3029')
         
         umbrel_url = umbrel_base_url + '/api/folders'
 

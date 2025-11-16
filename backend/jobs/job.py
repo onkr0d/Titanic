@@ -466,7 +466,7 @@ def upload_video_to_umbrel(input_file=None):
         raise FileNotFoundError(f"File not found: {compressed_file}")
     
     # Get Umbrel server URL from environment
-    umbrel_url = os.environ.get('UMBREL_SERVER_URL', 'http://100.97.35.4:3029') # tailsale ip
+    umbrel_url = os.environ.get('UMBREL_SERVER_URL', 'http://umbrel:3029')
 
     # Upload to Umbrel server with automatic retry on failure
     logger.debug(f"Uploading video to Umbrel: {compressed_file}")

@@ -2,7 +2,7 @@ manifestVersion: 1
 id: titanic
 name: Titanic
 tagline: Sink files to your Umbrel
-icon: http://100.86.96.43:3000/titanic-icon-4.png
+icon: http://ivans-mac:3000/titanic-icon-4.png
 category: Development
 version: "1.0.0"
 port: 3029
@@ -15,9 +15,9 @@ submission: https://github.com/onkr0d/Titanic/
 repo: https://github.com/onkr0d/Titanic
 support: https://github.com/onkr0d/Titanic/issues
 gallery:
-  - http://100.86.96.43:3000/1.png
-  - http://100.86.96.43:3000/2.png
-  - http://100.86.96.43:3000/3.png
+  - http://ivans-mac:3000/1.png
+  - http://ivans-mac:3000/2.png
+  - http://ivans-mac:3000/3.png
 releaseNotes: >-
   Glorious release.
 dependencies: []

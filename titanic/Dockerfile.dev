@@ -1,5 +1,5 @@
 # Development stage with cargo-watch for hot reloading
-FROM rust:1.82-alpine
+FROM rust:1.91-alpine
 
 # Install required packages for building and development
 RUN apk add --no-cache \

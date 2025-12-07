@@ -1,6 +1,6 @@
 use crate::error::AppError;
 use axum::http::HeaderMap;
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

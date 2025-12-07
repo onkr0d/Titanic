@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.82-alpine AS builder
+FROM rust:1.91-alpine AS builder
 
 # Install required packages for building
 RUN apk add --no-cache \

@@ -1,32 +1,32 @@
 [package]
 name = "titanic"
-version = "0.1.0"
-edition = "2021"
+version = "1.0.0"
+edition = "2024"
 
 [dependencies]
-axum = { version = "0.7", features = ["json", "multipart"] }
+axum = { version = "0.8.7", features = ["json", "multipart"] }
 libc = "0.2"
 tokio = { version = "1.38", features = ["full"] }
-tower = "0.4"
-tower-http = { version = "0.5.2", features = ["cors", "limit"] }
+tower = "0.5.2"
+tower-http = { version = "0.6.7", features = ["cors", "limit"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 anyhow = "1.0.86"
-thiserror = "1.0.61"
+thiserror = "2.0.17"
 uuid = { version = "1.0", features = ["v4"] }
 chrono = { version = "0.4.38", features = ["serde"] }
 futures = "0.3"
 reqwest = "0.12.5"
-jsonwebtoken = "9.3.0"
-base64 = "0.21"
+jsonwebtoken = { version = "10.2.0",  features = ["aws_lc_rs"] }
+base64 = "0.22.1"
 sha2 = "0.10"
 hmac = "0.12"
 hex = "0.4"
 tempfile = "3.8"
 path-slash = "0.2" 
 dotenvy = "0.15.7"
-sanitize-filename = "0.5.0"
+sanitize-filename = "0.6.0"
 tokio-util = { version = "0.7.11", features = ["io"] }
 openssl = { version = "0.10", features = ["vendored"] }

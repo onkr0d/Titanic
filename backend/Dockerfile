@@ -1,5 +1,5 @@
 # Builder Stage 
-FROM python:alpine AS builder
+FROM python:3.14-alpine AS builder
 
 # Set working dir for building
 WORKDIR /app

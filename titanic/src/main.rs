@@ -1,10 +1,10 @@
 use anyhow::Result;
 use axum::{
+    Router,
     extract::{DefaultBodyLimit, Multipart, State},
     http::HeaderMap,
     response::Json,
     routing::{get, post},
-    Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -16,11 +16,8 @@ mod error;
 mod upload;
 use axum::extract::multipart::MultipartError;
 
-use tower_http::{
-    cors::CorsLayer,
-    limit::RequestBodyLimitLayer,
-};
-use axum::http::{Method, HeaderName, HeaderValue};
+use axum::http::{HeaderName, HeaderValue, Method};
+use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer};
 
 use auth::FirebaseAuth;
 use config::Config;

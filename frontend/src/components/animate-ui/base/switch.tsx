@@ -48,6 +48,7 @@ function Switch({
       data-slot="switch"
       {...props}
       onCheckedChange={handleCheckedChange}
+      nativeButton={true}
       className={cn(
         'peer relative inline-flex p-[3px] h-6 w-10 shrink-0 cursor-pointer items-center rounded-full transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[checked]:bg-primary data-[unchecked]:bg-input data-[checked]:justify-end data-[unchecked]:justify-start',
         className,

@@ -28,3 +28,4 @@ node_modules/
 .mypy_cache/
 /backend/videos
 /titanic/Clips
+/frontend/.firebase

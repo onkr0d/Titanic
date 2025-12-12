@@ -23,7 +23,7 @@ COPY jobs/ jobs/
 
 
 # Runtime Stage 
-FROM python:alpine
+FROM python:3.14-alpine
 WORKDIR /app
 
 # Install only runtime dependencies

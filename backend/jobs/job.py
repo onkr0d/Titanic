@@ -187,11 +187,24 @@ def process_audio_with_rnnoise(input_file: str, output_file: str) -> str:
         measure_run = subprocess.run(measure_cmd, capture_output=True, text=True, check=True)
         # loudnorm stats print to stderr; parse JSON block:
         import re, json
-        m = re.search(r"\{[\s\S]*?\}\s*$", measure_run.stderr)
-        if not m:
-            logger.error("Failed to capture loudnorm measurement JSON")
+        stderr_output = measure_run.stderr
+        logger.debug("FFmpeg loudnorm stderr length: %d chars", len(stderr_output) if stderr_output else 0)
+        
+        # Find JSON block containing loudnorm measurements
+        # The JSON has keys like input_i, input_tp, etc. - find the block containing these
+        json_match = None
+        for m in re.finditer(r'\{[^{}]+\}', stderr_output):
+            candidate = m.group(0)
+            if '"input_i"' in candidate and '"input_tp"' in candidate:
+                json_match = candidate
+                break
+        
+        if not json_match:
+            logger.error("Failed to capture loudnorm measurement JSON. Stderr tail: %s", stderr_output[-1000:] if stderr_output else "(empty)")
             return None
-        stats = json.loads(m.group(0))
+        
+        logger.debug("Found loudnorm JSON: %s", json_match[:200])
+        stats = json.loads(json_match)
 
         # ---- Pass 2 (apply): rebuild full file with 3 tracks, loudnorm on the MIX ONLY ----
         # We’ll redo the mix and apply loudnorm with measured_* values,

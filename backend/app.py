@@ -76,8 +76,8 @@ except PermissionError as e:
         logger.error(f"Compressed directory {COMPRESSED_FOLDER} is not accessible")
         raise
 
-ffmpeg_queue = Queue('ffmpeg', connection=Redis(), default_timeout=18000) # 5 hours
-umbrel_queue = Queue('umbrel', connection=Redis(), default_timeout=18000) # 5 hours
+ffmpeg_queue = Queue('ffmpeg', connection=Redis(), default_timeout=19800) # 5.5 hours
+umbrel_queue = Queue('umbrel', connection=Redis(), default_timeout=7200) # 2 hours
 
 # TODO: set Firebase hosting IP to be static, so I can whitelist it in the backend??? 🤔
 def verify_firebase_token(f):

@@ -36,7 +36,7 @@ msgpack==1.1.2
 priority==2.0.0
 proto-plus==1.26.1
 protobuf==6.33.2
-pyasn1==0.6.1
+pyasn1==0.6.2
 pyasn1_modules==0.4.2
 pycparser==2.23
 PyJWT==2.10.1

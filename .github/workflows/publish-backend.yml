@@ -1,5 +1,4 @@
-name: Publish Titanic Backend Images
-
+name: CD - Backend Server
 on:
   push:
     branches: ['main']

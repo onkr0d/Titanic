@@ -1,4 +1,4 @@
-name: Deploy Functions
+name: CD - Firebase Functions
 on:
   push:
     branches:

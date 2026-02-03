@@ -33,8 +33,10 @@ const DiskSpaceIndicator = () => {
         };
 
         fetchDiskSpace();
-        // Refresh every 30 seconds
-        const interval = setInterval(fetchDiskSpace, 30000);
+        // Refresh every 30 seconds, but skip if tab is hidden (avoids Firebase timeout errors)
+        const interval = setInterval(() => {
+            if (!document.hidden) fetchDiskSpace();
+        }, 30000);
 
         return () => clearInterval(interval);
     }, []);

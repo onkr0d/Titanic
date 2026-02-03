@@ -46,14 +46,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Extract tag name (e.g., v1.0.0) for tagging
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic
-          tags: type=semver,pattern=v{{version}}
-
       - name: Build and Push (${{ matrix.suffix }})
         uses: docker/build-push-action@v6
         with:
@@ -61,7 +53,7 @@ jobs:
           push: true
           platforms: ${{ matrix.platform }}
           # Tag: titanic:v1.0.0-amd64
-          tags: ${{ steps.meta.outputs.tags }}${{ matrix.suffix }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic:${{ github.ref_name }}${{ matrix.suffix }}
           # Read from the DEV cache to speed up release builds!
           cache-from: type=gha,scope=titanic-${{ matrix.suffix }}
           provenance: false

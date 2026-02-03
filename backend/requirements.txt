@@ -45,6 +45,7 @@ pyOpenSSL==25.3.0
 pyparsing==3.2.5
 Quart==0.20.0
 quart-cors==0.8.0
+sentry-sdk[quart,rq]==2.38.0
 aiofiles==25.1.0
 redis==7.1.0
 requests==2.32.5

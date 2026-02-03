@@ -24,6 +24,10 @@ services:
       - IS_DEV=${IS_DEV:-true}
       - UMBREL_SERVER_URL=http://umbrel:3029
       - FIREBASE_API_KEY=${FIREBASE_API_KEY}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-dev}
+      - SENTRY_DSN=${QUART_SENTRY_DSN}
+      - SENTRY_RQ_DSN=${SENTRY_RQ_DSN}
+      - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE}
       - ENABLE_RNNOISE=${ENABLE_RNNOISE:-true}  # Set to 'true' to enable RNNoise denoising on mic track
     secrets:
       - admin-sdk-cred
@@ -48,6 +52,10 @@ services:
       - "3029:3029"
     env_file:
       - .env
+    environment:
+      - SENTRY_DSN=${RUST_SENTRY_DSN}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-dev}
+      - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE}
     volumes:
       # Mount source files for hot-reloading (cargo-watch will rebuild)
       - ./titanic/src:/app/src

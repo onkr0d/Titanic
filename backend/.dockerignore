@@ -4,6 +4,7 @@ __pycache__
 .pytest_cache
 .coverage
 .env
+admin-sdk-cred.json
 venv/
 
 # Docker and deployment
@@ -18,4 +19,4 @@ videos/*
 # Editor and OS files
 .DS_Store
 .idea/
-.vscode/ 
+.vscode/

@@ -17,6 +17,5 @@ Sentry.init({
     /^https:\/\/compress\.ivan\.boston/, // prod API
     /^https?:\/\/localhost:6969/,        // dev API  
   ],
-  enabled: import.meta.env.PROD
-
+  environment: import.meta.env.PROD ? "production" : "development",
 });

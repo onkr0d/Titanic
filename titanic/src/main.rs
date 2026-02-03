@@ -7,9 +7,10 @@ use axum::{
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::info;
+use tracing::{info, warn};
 mod auth;
 mod config;
 mod error;
@@ -67,6 +68,43 @@ impl From<MultipartError> for AppError {
 
 const CONTENT_LENGTH_LIMIT: usize = 10 * 1024 * 1024 * 1024; // 10GB
 
+fn sentry_traces_sample_rate() -> Option<f32> {
+    let sample_rate = env::var("SENTRY_TRACES_SAMPLE_RATE").ok()?;
+    let sample_rate = sample_rate.trim();
+    if sample_rate.is_empty() {
+        return None;
+    }
+    match sample_rate.parse::<f32>() {
+        Ok(value) => Some(value),
+        Err(_) => {
+            warn!(
+                "Invalid SENTRY_TRACES_SAMPLE_RATE={}; ignoring",
+                sample_rate
+            );
+            None
+        }
+    }
+}
+
+fn init_sentry() -> Option<sentry::ClientInitGuard> {
+    let dsn = env::var("SENTRY_DSN").ok()?;
+    let dsn = dsn.trim();
+    if dsn.is_empty() {
+        return None;
+    }
+
+    Some(sentry::init((
+        dsn,
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            environment: env::var("SENTRY_ENVIRONMENT").ok().map(|v| v.into()),
+            send_default_pii: true,
+            traces_sample_rate: sentry_traces_sample_rate()?,
+            ..Default::default()
+        },
+    )))
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Load environment variables from .env file
@@ -74,6 +112,8 @@ async fn main() -> Result<()> {
 
     // Initialize tracing
     tracing_subscriber::fmt::init();
+
+    let _sentry_guard = init_sentry();
 
     info!("Starting Titanic Umbrel server...");
 

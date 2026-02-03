@@ -12,6 +12,7 @@ import firebase_admin
 import shutil
 from firebase_admin import credentials
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
+import sentry_sdk
 
 # This configures logging for any process that imports this module.
 # It's safe to call here because logging.basicConfig() does nothing
@@ -23,6 +24,25 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+def _sentry_traces_sample_rate() -> float:
+    sample_rate = os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "").strip()
+    if not sample_rate:
+        return 1.0
+    try:
+        return float(sample_rate)
+    except ValueError:
+        logger.warning("Invalid SENTRY_TRACES_SAMPLE_RATE=%s; defaulting to 1.0", sample_rate)
+        return 1.0
+
+_sentry_dsn = os.environ.get("SENTRY_RQ_DSN", "").strip()
+if _sentry_dsn:
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        environment=os.environ.get("SENTRY_ENVIRONMENT"),
+        send_default_pii=True,
+        traces_sample_rate=_sentry_traces_sample_rate(),
+    )
 
 def initialize_firebase():
     """

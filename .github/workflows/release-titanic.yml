@@ -52,7 +52,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic
-          tags: type=semver,pattern={{version}}
+          tags: type=semver,pattern=v{{version}}
 
       - name: Build and Push (${{ matrix.suffix }})
         uses: docker/build-push-action@v6

@@ -87,6 +87,6 @@ jobs:
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          package: titanic
+          package: titanic/titanic
           delete-tags: latest-*
           dry-run: false

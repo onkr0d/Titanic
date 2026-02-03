@@ -147,7 +147,7 @@ jobs:
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          package: titanic
+          package: titanic/titanic
           # Delete the platform-specific tags for this release (e.g., v1.0.0-amd64, v1.0.0-arm64)
           delete-tags: ${{ github.ref_name }}-amd64,${{ github.ref_name }}-arm64
           dry-run: false

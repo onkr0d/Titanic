@@ -1,4 +1,4 @@
-name: Publish Titanic Umbrel Component
+name: CI - Build Umbrel App
 
 on:
   push:
@@ -7,60 +7,86 @@ on:
       - 'titanic/**'
       - '.github/workflows/publish-titanic.yml'
 
-# Defines custom environment variables for the workflow
+concurrency: 
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: onkr0d/titanic
 
-# There is a single job in this workflow
 jobs:
-  build-and-push-titanic:
-    runs-on: ubuntu-latest
-    # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
+  # PHASE 1: Build Native Images in Parallel
+  build-platform:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            suffix: -amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            suffix: -arm64
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3.6.0
-
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3.10.0
+        uses: docker/setup-buildx-action@v3
 
-      # Login to GitHub Container Registry
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3.4.0
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Extract metadata for Titanic component
-      - name: Extract metadata for Titanic
-        id: titanic-meta
-        uses: docker/metadata-action@v5.7.0
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      # Build and push Titanic image
-      - name: Build and push Titanic image
-        uses: docker/build-push-action@v6.17.0
+      - name: Build and Push (${{ matrix.suffix }})
+        uses: docker/build-push-action@v6
         with:
           context: ./titanic
-          platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic:latest
-            ${{ steps.titanic-meta.outputs.tags }}
-          labels: ${{ steps.titanic-meta.outputs.labels }}
-          cache-from: type=gha,scope=titanic
-          cache-to: type=gha,mode=max,scope=titanic
+          # We force the platform to match the runner for native speed
+          platforms: ${{ matrix.platform }}
+          # Tag with suffix (e.g., titanic:latest-amd64)
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic:latest${{ matrix.suffix }}
+          # Separate caches for each architecture
+          cache-from: type=gha,scope=titanic-${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=titanic-${{ matrix.suffix }}
+          provenance: false
+
+  # PHASE 2: Stitch them together into 'latest'
+  merge-manifests:
+    needs: build-platform
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Multi-Arch Manifest
+        run: |
+          docker buildx imagetools create -t \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic:latest \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic:latest-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic:latest-arm64
+
+      - name: Cleanup temporary dev tags
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          package: titanic
+          delete-tags: latest-*
+          dry-run: false

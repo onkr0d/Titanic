@@ -1,0 +1,153 @@
+name: Release - Umbrel App
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: onkr0d/titanic
+
+jobs:
+  # PHASE 1: Build Native Images in Parallel
+  build-release-platform:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            suffix: -amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            suffix: -arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Extract tag name (e.g., v1.0.0) for tagging
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic
+          tags: type=semver,pattern={{version}}
+
+      - name: Build and Push (${{ matrix.suffix }})
+        uses: docker/build-push-action@v6
+        with:
+          context: ./titanic
+          push: true
+          platforms: ${{ matrix.platform }}
+          # Tag: titanic:v1.0.0-amd64
+          tags: ${{ steps.meta.outputs.tags }}${{ matrix.suffix }}
+          # Read from the DEV cache to speed up release builds!
+          cache-from: type=gha,scope=titanic-${{ matrix.suffix }}
+          provenance: false
+
+  # PHASE 2: Stitch, Release, and Update Umbrel
+  release-and-deploy:
+    needs: build-release-platform
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 1. Stitch the manifest
+      - name: Create Multi-Arch Manifest
+        id: create_manifest
+        run: |
+          TAG_NAME=${{ github.ref_name }}
+          FULL_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic:${TAG_NAME}"
+          
+          # Merge the -amd64 and -arm64 images into one tag
+          docker buildx imagetools create -t $FULL_IMAGE \
+            ${FULL_IMAGE}-amd64 \
+            ${FULL_IMAGE}-arm64
+            
+          # Inspect to get the final SHA256 Digest of the Manifest List
+          DIGEST=$(docker buildx imagetools inspect $FULL_IMAGE --format "{{.Manifest.Digest}}")
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+
+      # 2. Create GitHub Release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # 3. Update Umbrel App Store
+      - name: Update Umbrel App Store
+        env:
+          GH_TOKEN: ${{ secrets.UMBREL_APPS_PAT }}
+          TAG_NAME: ${{ github.ref_name }}
+          # Use the digest we captured from the imagetools inspect step
+          DIGEST: ${{ steps.create_manifest.outputs.digest }}
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "Titanic Release Bot"
+
+          git clone https://x-access-token:${GH_TOKEN}@github.com/onkr0d/umbrel-apps.git umbrel_apps_temp
+          cd umbrel_apps_temp/sparkles-titanic
+
+          CLEAN_VER="${TAG_NAME#v}"
+          
+          # Construct the exact reference: image:tag@sha256:....
+          NEW_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic:${TAG_NAME}@${DIGEST}"
+          
+          # Update Manifests
+          sed -i "s|image: .*|image: $NEW_IMAGE|g" docker-compose.yml
+          sed -i 's/version: ".*"/version: "'"$CLEAN_VER"'"/' umbrel-app.yml
+
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${TAG_NAME}"
+          NOTES="Update to ${TAG_NAME}. See full changelog: ${RELEASE_URL}"
+          sed -i "s|releaseNotes: .*|releaseNotes: \"$NOTES\"|g" umbrel-app.yml
+
+          git add docker-compose.yml umbrel-app.yml
+          if git diff --staged --quiet; then
+            echo "No changes detected."
+          else
+            git commit -m "Release Titanic ${TAG_NAME}"
+            git push origin master
+          fi
+
+      - name: Cleanup temporary release tags
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          package: titanic
+          # Delete the platform-specific tags for this release (e.g., v1.0.0-amd64, v1.0.0-arm64)
+          delete-tags: ${{ github.ref_name }}-amd64,${{ github.ref_name }}-arm64
+          dry-run: false

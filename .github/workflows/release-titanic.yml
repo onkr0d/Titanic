@@ -90,7 +90,7 @@ jobs:
             ${FULL_IMAGE}-arm64
             
           # Inspect to get the final SHA256 Digest of the Manifest List
-          DIGEST=$(docker buildx imagetools inspect $FULL_IMAGE --format "{{.Manifest.Digest}}")
+          DIGEST=$(docker buildx imagetools inspect $FULL_IMAGE | grep "^Digest:" | awk '{print $2}')
           echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
       # 2. Create GitHub Release

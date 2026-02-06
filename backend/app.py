@@ -70,6 +70,7 @@ logging.getLogger("cachecontrol.controller").setLevel(logging.WARNING)
 
 logging.getLogger("google.auth").setLevel(logging.WARNING)
 logging.getLogger("google.auth.transport").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 firebase_admin.initialize_app(cred)
 

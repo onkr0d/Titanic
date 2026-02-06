@@ -22,6 +22,7 @@ import sentry_sdk
 from sentry_sdk.integrations.quart import QuartIntegration
 
 IS_DEV = os.environ.get('IS_DEV', 'false').lower() == 'true'
+logging.basicConfig(level=logging.DEBUG if IS_DEV else logging.INFO)
 logger = logging.getLogger(__name__)
 app = Quart(__name__)
 origins = ["https://titanic.ivan.boston"]
@@ -137,7 +138,6 @@ async def verify_app_check() -> None:
         app_check.verify_token(app_check_token)
         # If verify_token() succeeds, okay to continue to route handler.
     except (ValueError, jwt.exceptions.DecodeError):
-        logger.error(f"App Check token verification failed: {app_check_token}")
         abort(401)
     
 def allowed_file(filename):

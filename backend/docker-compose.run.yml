@@ -10,7 +10,7 @@ services:
       - UMBREL_SERVER_URL=http://umbrel:3029 # tailsale ip
       - FIREBASE_API_KEY=${FIREBASE_API_KEY}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
-      - SENTRY_DSN=${QUART_SENTRY_DSN}
+      - SENTRY_DSN=${SENTRY_QUART_DSN}
       - SENTRY_RQ_DSN=${SENTRY_RQ_DSN}
       - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE}
       - ENABLE_RNNOISE=${ENABLE_RNNOISE:-true}  # Set to 'true' to enable RNNoise denoising on mic track

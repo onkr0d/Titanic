@@ -10,9 +10,6 @@ services:
       - IS_DEV=false
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-titanic-uploader}
       - PLEX_MEDIA_PATH=${PLEX_MEDIA_PATH:-/downloads}
-      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
-      - SENTRY_DSN=${RUST_SENTRY_DSN}
-      - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE:1.0}
     volumes:
       - ${APP_DATA_DIR}/data:/data
       - ${UMBREL_ROOT}/home/Downloads:/downloads

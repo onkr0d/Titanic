@@ -8,6 +8,7 @@ pub struct Config {
     pub firebase_project_id: String,
     pub plex_media_path: String,
     pub is_dev: bool,
+    pub data_dir: String,
 }
 
 impl Config {
@@ -31,11 +32,20 @@ impl Config {
             .to_lowercase()
             == "true";
 
+        let data_dir = env::var("DATA_DIR").unwrap_or_else(|_| {
+            if cfg!(target_os = "macos") {
+                "./data".to_string()
+            } else {
+                "/data".to_string()
+            }
+        });
+
         Ok(Config {
             bind_address,
             firebase_project_id,
             plex_media_path,
             is_dev,
+            data_dir,
         })
     }
 }

@@ -25,15 +25,6 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 
-# Environment variables that can be configured in Umbrel UI
-widgets:
-  - id: "firebase-project-id"
-    type: "text"
-    name: "Firebase Project ID"
-    description: "Your Firebase project ID for authentication"
-    required: true
-    value: ""
-
 # Permissions for accessing Plex media directory
 permissions:
   - STORAGE_DOWNLOADS

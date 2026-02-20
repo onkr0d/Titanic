@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Titanic — Settings</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0a0a0f;
+            color: #e4e4ea;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 3rem 1.5rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 560px;
+        }
+
+        .header {
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            font-size: 0.9rem;
+            color: #8888a0;
+            line-height: 1.5;
+        }
+
+        .card {
+            background: #14141f;
+            border: 1px solid #1e1e2e;
+            border-radius: 16px;
+            padding: 1.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 0.35rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-title .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #3b3b52;
+            flex-shrink: 0;
+        }
+
+        .card-title .dot.active {
+            background: #22c55e;
+            box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+        }
+
+        .card-subtitle {
+            font-size: 0.8rem;
+            color: #6b6b80;
+            margin-bottom: 1.5rem;
+        }
+
+        .field {
+            margin-bottom: 1.25rem;
+        }
+
+        .field:last-child {
+            margin-bottom: 0;
+        }
+
+        label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #a0a0b4;
+            margin-bottom: 0.4rem;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 0.65rem 0.85rem;
+            background: #0a0a14;
+            border: 1px solid #2a2a3a;
+            border-radius: 10px;
+            color: #e4e4ea;
+            font-size: 0.875rem;
+            font-family: 'Inter', sans-serif;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+        }
+
+        input::placeholder {
+            color: #3b3b52;
+        }
+
+        .hint {
+            font-size: 0.72rem;
+            color: #555568;
+            margin-top: 0.3rem;
+        }
+
+        .actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 0.65rem 1.5rem;
+            border-radius: 10px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #6366f1;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #5558e6;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-danger {
+            background: transparent;
+            color: #ef4444;
+            border: 1px solid #2a2a3a;
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.08);
+            border-color: #ef4444;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            padding: 0.75rem 1.25rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            opacity: 0;
+            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .toast.success {
+            background: #0b3d24;
+            color: #4ade80;
+            border: 1px solid #166534;
+        }
+
+        .toast.error {
+            background: #3b1018;
+            color: #f87171;
+            border: 1px solid #7f1d1d;
+        }
+
+        .spinner {
+            display: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.8rem;
+            color: #6b6b80;
+            text-decoration: none;
+            margin-bottom: 1.5rem;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: #a0a0b4;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back</a>
+
+        <div class="header">
+            <h1>🚢 Settings</h1>
+            <p>Configure optional integrations for your Titanic instance. Changes take effect immediately.</p>
+        </div>
+
+        <div class="card">
+            <div class="card-title">
+                <span class="dot" id="sentry-dot"></span>
+                Sentry Integration
+            </div>
+            <p class="card-subtitle">Error tracking and performance monitoring</p>
+
+            <div class="field">
+                <label for="sentry_dsn">DSN</label>
+                <input type="text" id="sentry_dsn" placeholder="https://key@o123.ingest.us.sentry.io/456">
+                <p class="hint">Your project's Sentry DSN. Leave empty to disable.</p>
+            </div>
+
+            <div class="field">
+                <label for="sentry_environment">Environment</label>
+                <input type="text" id="sentry_environment" placeholder="production">
+            </div>
+
+            <div class="field">
+                <label for="sentry_traces_sample_rate">Traces Sample Rate</label>
+                <input type="number" id="sentry_traces_sample_rate" placeholder="1.0" min="0" max="1" step="0.1">
+                <p class="hint">0.0 (none) to 1.0 (all traces). Defaults to 1.0.</p>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-primary" id="save-btn" onclick="saveSettings()">
+                Save Settings
+            </button>
+            <div class="spinner" id="spinner"></div>
+            <button class="btn btn-danger" id="clear-btn" onclick="clearSettings()">
+                Clear All
+            </button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const fields = ['sentry_dsn', 'sentry_environment', 'sentry_traces_sample_rate'];
+
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type;
+            requestAnimationFrame(() => toast.classList.add('show'));
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        function setLoading(loading) {
+            document.getElementById('save-btn').disabled = loading;
+            document.getElementById('spinner').style.display = loading ? 'block' : 'none';
+        }
+
+        function updateDot(settings) {
+            const dot = document.getElementById('sentry-dot');
+            const hasDsn = settings.sentry_dsn && settings.sentry_dsn.trim() !== '';
+            dot.className = hasDsn ? 'dot active' : 'dot';
+        }
+
+        async function loadSettings() {
+            try {
+                const res = await fetch('/api/settings');
+                if (!res.ok) throw new Error('Failed to load');
+                const settings = await res.json();
+
+                for (const field of fields) {
+                    const el = document.getElementById(field);
+                    if (settings[field] !== null && settings[field] !== undefined) {
+                        el.value = settings[field];
+                    }
+                }
+                updateDot(settings);
+            } catch (e) {
+                console.error('Failed to load settings:', e);
+            }
+        }
+
+        async function saveSettings() {
+            setLoading(true);
+            try {
+                const body = {};
+                for (const field of fields) {
+                    const val = document.getElementById(field).value.trim();
+                    if (field === 'sentry_traces_sample_rate' && val !== '') {
+                        body[field] = parseFloat(val);
+                    } else {
+                        body[field] = val === '' ? null : val;
+                    }
+                }
+
+                const res = await fetch('/api/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || 'Save failed');
+                }
+
+                const saved = await res.json();
+                updateDot(saved);
+                showToast('Settings saved — Sentry reloaded', 'success');
+            } catch (e) {
+                showToast(e.message, 'error');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function clearSettings() {
+            for (const field of fields) {
+                document.getElementById(field).value = '';
+            }
+            await saveSettings();
+        }
+
+        loadSettings();
+    </script>
+</body>
+</html>

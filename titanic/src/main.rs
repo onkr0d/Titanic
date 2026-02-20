@@ -7,13 +7,13 @@ use axum::{
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
-use std::env;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::{info, warn};
+use tracing::info;
 mod auth;
 mod config;
 mod error;
+mod settings;
 mod upload;
 use axum::extract::multipart::MultipartError;
 
@@ -55,9 +55,11 @@ struct FoldersResponse {
     folders: Vec<String>,
 }
 
-struct AppState {
-    auth: FirebaseAuth,
-    uploader: VideoUploader,
+pub struct AppState {
+    pub auth: FirebaseAuth,
+    pub uploader: VideoUploader,
+    pub data_dir: String,
+    pub sentry_guard: settings::SentryGuard,
 }
 
 impl From<MultipartError> for AppError {
@@ -68,43 +70,6 @@ impl From<MultipartError> for AppError {
 
 const CONTENT_LENGTH_LIMIT: usize = 10 * 1024 * 1024 * 1024; // 10GB
 
-fn sentry_traces_sample_rate() -> Option<f32> {
-    let sample_rate = env::var("SENTRY_TRACES_SAMPLE_RATE").ok()?;
-    let sample_rate = sample_rate.trim();
-    if sample_rate.is_empty() {
-        return None;
-    }
-    match sample_rate.parse::<f32>() {
-        Ok(value) => Some(value),
-        Err(_) => {
-            warn!(
-                "Invalid SENTRY_TRACES_SAMPLE_RATE={}; ignoring",
-                sample_rate
-            );
-            None
-        }
-    }
-}
-
-fn init_sentry() -> Option<sentry::ClientInitGuard> {
-    let dsn = env::var("SENTRY_DSN").ok()?;
-    let dsn = dsn.trim();
-    if dsn.is_empty() {
-        return None;
-    }
-
-    Some(sentry::init((
-        dsn,
-        sentry::ClientOptions {
-            release: sentry::release_name!(),
-            environment: env::var("SENTRY_ENVIRONMENT").ok().map(|v| v.into()),
-            send_default_pii: true,
-            traces_sample_rate: sentry_traces_sample_rate()?,
-            ..Default::default()
-        },
-    )))
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     // Load environment variables from .env file
@@ -113,13 +78,18 @@ async fn main() -> Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt::init();
 
-    let _sentry_guard = init_sentry();
-
     info!("Starting Titanic Umbrel server...");
 
     // Load configuration
     let config = Config::from_env()?;
     info!("Configuration loaded: {:?}", config);
+
+    // Load persisted settings and initialise Sentry
+    let settings_path = settings::Settings::file_path(&config.data_dir);
+    let user_settings = settings::Settings::load(&settings_path);
+    let sentry_guard = Arc::new(tokio::sync::Mutex::new(
+        settings::init_sentry(&user_settings),
+    ));
 
     // Initialize Firebase authentication
     let auth = FirebaseAuth::new(&config)?;
@@ -133,9 +103,13 @@ async fn main() -> Result<()> {
     );
 
     // Create shared state
-
     let bind_addr = config.bind_address.clone();
-    let state = Arc::new(AppState { auth, uploader });
+    let state = Arc::new(AppState {
+        auth,
+        uploader,
+        data_dir: config.data_dir,
+        sentry_guard,
+    });
 
     // Configure CORS
     let cors = CorsLayer::new()
@@ -166,6 +140,8 @@ async fn main() -> Result<()> {
         .route("/api/upload", post(upload_video))
         .route("/api/space", get(space_check))
         .route("/api/folders", get(list_folders))
+        .route("/settings", get(settings::settings_page))
+        .route("/api/settings", get(settings::get_settings).put(settings::put_settings))
         .layer(cors)
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(CONTENT_LENGTH_LIMIT))

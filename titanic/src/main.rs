@@ -140,6 +140,7 @@ async fn main() -> Result<()> {
         .route("/api/upload", post(upload_video))
         .route("/api/space", get(space_check))
         .route("/api/folders", get(list_folders))
+        .route("/", get(settings::settings_page))
         .route("/settings", get(settings::settings_page))
         .route("/api/settings", get(settings::get_settings).put(settings::put_settings))
         .layer(cors)

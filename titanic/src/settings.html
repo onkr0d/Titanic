@@ -9,6 +9,66 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
+        :root {
+            --bg-body: #f4f4f6;
+            --bg-card: #ffffff;
+            --bg-input: #ffffff;
+            --border-color: #e5e7eb;
+            --text-main: #111827;
+            --text-muted: #6b7280;
+            --text-hint: #9ca3af;
+            --dot-inactive: #e5e7eb;
+            --dot-active: #22c55e;
+            --dot-active-shadow: rgba(34, 197, 94, 0.4);
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --primary-shadow: rgba(99, 102, 241, 0.2);
+            --danger: #ef4444;
+            --danger-bg: rgba(239, 68, 68, 0.08);
+            --toast-success-bg: #dcfce7;
+            --toast-success-text: #166534;
+            --toast-success-border: #86efac;
+            --toast-error-bg: #fee2e2;
+            --toast-error-text: #991b1b;
+            --toast-error-border: #fca5a5;
+            --dropdown-hover: #f3f4f6;
+            --dropdown-shadow: rgba(0, 0, 0, 0.1);
+            --spinner: #111827;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-body: #0a0a0f;
+                --bg-card: #14141f;
+                --bg-input: #0a0a14;
+                --border-color: #1e1e2e;
+                --text-main: #e4e4ea;
+                --text-muted: #8888a0;
+                --text-hint: #555568;
+                --dot-inactive: #3b3b52;
+                --dot-active: #22c55e;
+                --dot-active-shadow: rgba(34, 197, 94, 0.4);
+                --primary: #6366f1;
+                --primary-hover: #5558e6;
+                --primary-shadow: rgba(99, 102, 241, 0.3);
+                --danger: #ef4444;
+                --danger-bg: rgba(239, 68, 68, 0.08);
+                --toast-success-bg: #0b3d24;
+                --toast-success-text: #4ade80;
+                --toast-success-border: #166534;
+                --toast-error-bg: #3b1018;
+                --toast-error-text: #f87171;
+                --toast-error-border: #7f1d1d;
+                --dropdown-hover: #2a2a3a;
+                --dropdown-shadow: rgba(0, 0, 0, 0.5);
+                --spinner: #ffffff;
+            }
+        }
+
+        :root {
+            color-scheme: light dark;
+        }
+
         *,
         *::before,
         *::after {
@@ -19,12 +79,13 @@
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #0a0a0f;
-            color: #e4e4ea;
+            background: var(--bg-body);
+            color: var(--text-main);
             min-height: 100vh;
             display: flex;
             justify-content: center;
             padding: 3rem 1.5rem;
+            transition: background-color 0.3s, color 0.3s;
         }
 
         .container {
@@ -39,28 +100,29 @@
         .header h1 {
             font-size: 1.75rem;
             font-weight: 700;
-            color: #fff;
+            color: var(--text-main);
             margin-bottom: 0.5rem;
         }
 
         .header p {
             font-size: 0.9rem;
-            color: #8888a0;
+            color: var(--text-muted);
             line-height: 1.5;
         }
 
         .card {
-            background: #14141f;
-            border: 1px solid #1e1e2e;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 1.75rem;
             margin-bottom: 1.5rem;
+            transition: background-color 0.3s, border-color 0.3s;
         }
 
         .card-title {
             font-size: 1rem;
             font-weight: 600;
-            color: #fff;
+            color: var(--text-main);
             margin-bottom: 0.35rem;
             display: flex;
             align-items: center;
@@ -71,18 +133,18 @@
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: #3b3b52;
+            background: var(--dot-inactive);
             flex-shrink: 0;
         }
 
         .card-title .dot.active {
-            background: #22c55e;
-            box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+            background: var(--dot-active);
+            box-shadow: 0 0 8px var(--dot-active-shadow);
         }
 
         .card-subtitle {
             font-size: 0.8rem;
-            color: #6b6b80;
+            color: var(--text-muted);
             margin-bottom: 1.5rem;
         }
 
@@ -98,36 +160,132 @@
             display: block;
             font-size: 0.8rem;
             font-weight: 500;
-            color: #a0a0b4;
+            color: var(--text-muted);
             margin-bottom: 0.4rem;
         }
 
         input[type="text"],
-        input[type="number"] {
+        input[type="number"],
+        select {
             width: 100%;
             padding: 0.65rem 0.85rem;
-            background: #0a0a14;
-            border: 1px solid #2a2a3a;
+            background: var(--bg-input);
+            border: 1px solid calc(var(--border-color) * 1.5);
+            /* slightly darker border on inputs isn't supported like this so we just use border color or a specific input border */
+            border-color: var(--border-color);
             border-radius: 10px;
-            color: #e4e4ea;
+            color: var(--text-main);
             font-size: 0.875rem;
             font-family: 'Inter', sans-serif;
             transition: border-color 0.2s, box-shadow 0.2s;
             outline: none;
+            appearance: none;
+            cursor: pointer;
         }
 
-        input:focus {
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+        input:focus,
+        select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-shadow);
         }
 
         input::placeholder {
-            color: #3b3b52;
+            color: var(--text-hint);
+        }
+
+        .custom-select {
+            position: relative;
+            width: 100%;
+        }
+
+        .custom-select-trigger {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            padding: 0.65rem 0.85rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-main);
+            font-size: 0.875rem;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            user-select: none;
+        }
+
+        .custom-select-trigger:focus,
+        .custom-select.open .custom-select-trigger {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-shadow);
+            outline: none;
+        }
+
+        .custom-select-trigger svg {
+            width: 16px;
+            height: 16px;
+            color: var(--text-muted);
+            transition: transform 0.2s;
+        }
+
+        .custom-select.open .custom-select-trigger svg {
+            transform: rotate(180deg);
+        }
+
+        .custom-select-dropdown {
+            position: absolute;
+            top: calc(100% + 5px);
+            left: 0;
+            right: 0;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            box-shadow: 0 10px 25px var(--dropdown-shadow);
+            z-index: 50;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-5px);
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .custom-select.open .custom-select-dropdown {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .custom-select-option {
+            padding: 0.65rem 0.85rem;
+            font-size: 0.875rem;
+            color: var(--text-main);
+            cursor: pointer;
+            transition: background 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .custom-select-option:hover {
+            background: var(--dropdown-hover);
+        }
+
+        .custom-select-option.selected {
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        .custom-select-option.selected::after {
+            content: '✓';
+            color: var(--primary);
+            font-size: 0.9rem;
         }
 
         .hint {
             font-size: 0.72rem;
-            color: #555568;
+            color: var(--text-hint);
             margin-top: 0.3rem;
         }
 
@@ -149,14 +307,14 @@
         }
 
         .btn-primary {
-            background: #6366f1;
+            background: var(--primary);
             color: #fff;
         }
 
         .btn-primary:hover {
-            background: #5558e6;
+            background: var(--primary-hover);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 4px 12px var(--primary-shadow);
         }
 
         .btn-primary:active {
@@ -165,13 +323,13 @@
 
         .btn-danger {
             background: transparent;
-            color: #ef4444;
-            border: 1px solid #2a2a3a;
+            color: var(--danger);
+            border: 1px solid var(--border-color);
         }
 
         .btn-danger:hover {
-            background: rgba(239, 68, 68, 0.08);
-            border-color: #ef4444;
+            background: var(--danger-bg);
+            border-color: var(--danger);
         }
 
         .toast {
@@ -195,23 +353,23 @@
         }
 
         .toast.success {
-            background: #0b3d24;
-            color: #4ade80;
-            border: 1px solid #166534;
+            background: var(--toast-success-bg);
+            color: var(--toast-success-text);
+            border: 1px solid var(--toast-success-border);
         }
 
         .toast.error {
-            background: #3b1018;
-            color: #f87171;
-            border: 1px solid #7f1d1d;
+            background: var(--toast-error-bg);
+            color: var(--toast-error-text);
+            border: 1px solid var(--toast-error-border);
         }
 
         .spinner {
             display: none;
             width: 18px;
             height: 18px;
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            border-top-color: #fff;
+            border: 2px solid rgba(125, 125, 125, 0.2);
+            border-top-color: var(--spinner);
             border-radius: 50%;
             animation: spin 0.6s linear infinite;
         }
@@ -227,14 +385,14 @@
             align-items: center;
             gap: 0.35rem;
             font-size: 0.8rem;
-            color: #6b6b80;
+            color: var(--text-muted);
             text-decoration: none;
             margin-bottom: 1.5rem;
             transition: color 0.2s;
         }
 
         .back-link:hover {
-            color: #a0a0b4;
+            color: var(--text-main);
         }
     </style>
 </head>
@@ -273,6 +431,32 @@
             </div>
         </div>
 
+        <div class="card">
+            <div class="card-title">
+                Default Upload Directory
+            </div>
+            <p class="card-subtitle">Set the default folder constraint used by front-end clients when no folder is
+                selected.</p>
+
+            <div class="field">
+                <label for="default_folder">Suggested Folder Name</label>
+                <div class="custom-select" id="default_folder_select" tabindex="0">
+                    <div class="custom-select-trigger" id="default_folder_trigger">
+                        <span id="default_folder_text">System Default ("Clips")</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="custom-select-dropdown" id="default_folder_dropdown">
+                        <!-- Options will be populated here -->
+                    </div>
+                </div>
+                <input type="hidden" id="default_folder" value="">
+                <p class="hint">It is automatically marked as suggested in the UI.</p>
+            </div>
+        </div>
+
         <div class="actions">
             <button class="btn btn-primary" id="save-btn" onclick="saveSettings()">
                 Save Settings
@@ -287,7 +471,7 @@
     <div class="toast" id="toast"></div>
 
     <script>
-        const fields = ['sentry_dsn', 'sentry_environment', 'sentry_traces_sample_rate'];
+        const fields = ['sentry_dsn', 'sentry_environment', 'sentry_traces_sample_rate', 'default_folder'];
 
         function showToast(message, type) {
             const toast = document.getElementById('toast');
@@ -308,6 +492,95 @@
             dot.className = hasDsn ? 'dot active' : 'dot';
         }
 
+        // Custom Dropdown Logic
+        const customSelect = document.getElementById('default_folder_select');
+        const customTrigger = document.getElementById('default_folder_trigger');
+        const customDropdown = document.getElementById('default_folder_dropdown');
+        const customText = document.getElementById('default_folder_text');
+        const hiddenInput = document.getElementById('default_folder');
+
+        function setDropdownValue(val) {
+            hiddenInput.value = val || '';
+            const opts = customDropdown.querySelectorAll('.custom-select-option');
+            let found = false;
+            opts.forEach(opt => {
+                const optVal = opt.dataset.value;
+                if (optVal === hiddenInput.value) {
+                    opt.classList.add('selected');
+                    customText.textContent = opt.textContent;
+                    found = true;
+                } else {
+                    opt.classList.remove('selected');
+                }
+            });
+            if (!found) {
+                // Should fallback to default if not found
+                customText.textContent = 'System Default ("Clips")';
+                hiddenInput.value = '';
+                const defaultOpt = customDropdown.querySelector('.custom-select-option[data-value=""]');
+                if (defaultOpt) defaultOpt.classList.add('selected');
+            }
+        }
+
+        customTrigger.addEventListener('click', () => {
+            customSelect.classList.toggle('open');
+        });
+
+        customSelect.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                customSelect.classList.toggle('open');
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!customSelect.contains(e.target)) {
+                customSelect.classList.remove('open');
+            }
+        });
+
+        function populateDropdown(options) {
+            customDropdown.innerHTML = '';
+
+            // Add default option
+            const defaultOpt = document.createElement('div');
+            defaultOpt.className = 'custom-select-option' + (hiddenInput.value === '' ? ' selected' : '');
+            defaultOpt.dataset.value = '';
+            defaultOpt.textContent = 'System Default ("Clips")';
+            defaultOpt.addEventListener('click', () => {
+                setDropdownValue('');
+                customSelect.classList.remove('open');
+            });
+            customDropdown.appendChild(defaultOpt);
+
+            options.forEach(f => {
+                if (f === "Clips") return;
+                const opt = document.createElement('div');
+                opt.className = 'custom-select-option' + (hiddenInput.value === f ? ' selected' : '');
+                opt.dataset.value = f;
+                opt.textContent = f;
+                opt.addEventListener('click', () => {
+                    setDropdownValue(f);
+                    customSelect.classList.remove('open');
+                });
+                customDropdown.appendChild(opt);
+            });
+
+            setDropdownValue(hiddenInput.value); // Re-highlight correct option based on current input value
+        }
+
+
+        async function loadFolders() {
+            try {
+                const res = await fetch('/api/folders');
+                if (!res.ok) return;
+                const data = await res.json();
+                populateDropdown(data.folders || []);
+            } catch (e) {
+                console.error('Failed to load folders for autocomplete:', e);
+            }
+        }
+
         async function loadSettings() {
             try {
                 const res = await fetch('/api/settings');
@@ -315,9 +588,12 @@
                 const settings = await res.json();
 
                 for (const field of fields) {
-                    const el = document.getElementById(field);
                     if (settings[field] !== null && settings[field] !== undefined) {
-                        el.value = settings[field];
+                        if (field === 'default_folder') {
+                            setDropdownValue(settings[field]);
+                        } else {
+                            document.getElementById(field).value = settings[field];
+                        }
                     }
                 }
                 updateDot(settings);
@@ -362,12 +638,21 @@
 
         async function clearSettings() {
             for (const field of fields) {
-                document.getElementById(field).value = '';
+                if (field === 'default_folder') {
+                    setDropdownValue('');
+                } else {
+                    document.getElementById(field).value = '';
+                }
             }
             await saveSettings();
         }
 
-        loadSettings();
+        async function init() {
+            await loadFolders(); // Load folders first so the <select> has its options
+            await loadSettings(); // Then load settings so the value is correctly selected
+        }
+
+        init();
     </script>
 </body>
 

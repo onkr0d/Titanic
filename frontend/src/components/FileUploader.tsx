@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, X, Check, Clapperboard, Folder } from 'lucide-react';
 import { showToast } from '../utils/toast';
-import { uploadVideo, getFolders } from '../utils/api';
+import { uploadVideo, getFolders, getAppConfig } from '../utils/api';
 import Tooltip from './Tooltip';
 import { Switch } from './animate-ui/base/switch';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './animate-ui/components/radix/dropdown-menu';
@@ -21,16 +21,20 @@ const FileUploader = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [files, setFiles] = useState<FileState[]>([]);
     const [availableFolders, setAvailableFolders] = useState<string[]>([]);
+    const [defaultFolder, setDefaultFolder] = useState<string>("Clips");
     const [shiftPressed, setShiftPressed] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Fetch available folders on component mount
+    // Fetch available folders and config on component mount
     useEffect(() => {
-        const fetchFolders = async () => {
-            const folders = await getFolders();
+        const fetchFoldersAndConfig = async () => {
+            const [folders, config] = await Promise.all([getFolders(), getAppConfig()]);
             setAvailableFolders(folders);
+            if (config?.default_folder) {
+                setDefaultFolder(config.default_folder);
+            }
         };
-        fetchFolders();
+        fetchFoldersAndConfig();
 
         // Add global keyboard event listeners
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -96,7 +100,7 @@ const FileUploader = () => {
             id: Math.random().toString(36).substring(2, 11),
             status: 'ready' as const,
             shouldCompress: true, // Default to true for compression
-            folder: "Clips", // Default to Clips folder
+            folder: defaultFolder, // Configured default folder
             progress: undefined
         }))]);
     };
@@ -117,12 +121,12 @@ const FileUploader = () => {
         if (finalApplyToAll) {
             // Apply to all files that are not yet uploaded
             setFiles(prev => prev.map(f =>
-                f.status === 'ready' ? { ...f, folder: folder || "Clips" } : f
+                f.status === 'ready' ? { ...f, folder: folder || defaultFolder } : f
             ));
         } else {
             // Apply to just this file
             setFiles(prev => prev.map(f =>
-                f.id === fileId ? { ...f, folder: folder || "Clips" } : f
+                f.id === fileId ? { ...f, folder: folder || defaultFolder } : f
             ));
         }
     };
@@ -218,18 +222,13 @@ const FileUploader = () => {
                                     <Clapperboard className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0" />
                                     <div className="flex flex-col flex-grow min-w-0">
                                         <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{file.name}</span>
-                                        {folder && folder !== "Clips" && (
-                                            <span className="text-xs text-blue-600 dark:text-blue-400 flex items-center">
-                                                <Folder className="w-3 h-3 mr-1" />
-                                                {folder}
-                                            </span>
-                                        )}
-                                        {folder === "Clips" && (
-                                            <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center">
-                                                <Folder className="w-3 h-3 mr-1" />
-                                                Clips
-                                            </span>
-                                        )}
+                                        <span className={`text-xs flex items-center w-max ${(folder || defaultFolder) === defaultFolder
+                                            ? "text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800/50 px-1.5 py-0.5 rounded-md"
+                                            : "text-blue-600 dark:text-blue-400"
+                                            }`}>
+                                            <Folder className="w-3 h-3 mr-1" />
+                                            {folder || defaultFolder}
+                                        </span>
                                         {error && (
                                             <span className="text-xs text-red-500 dark:text-red-400">{error}</span>
                                         )}
@@ -258,17 +257,30 @@ const FileUploader = () => {
                                                             onClick={(e) => e.stopPropagation()}
                                                         >
                                                             <FolderOpen className="w-3 h-3" />
-                                                            {folder || "Clips"}
+                                                            {folder || defaultFolder}
                                                         </button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="start" className="w-40">
                                                         <DropdownMenuItem
-                                                            onClick={() => setFileFolder(id, "Clips")}
-                                                            className={folder === "Clips" ? "bg-accent" : ""}
+                                                            onClick={() => setFileFolder(id, defaultFolder)}
+                                                            className={`relative rounded overflow-hidden p-[1px] ${(folder || defaultFolder) === defaultFolder ? "" : "opacity-90 hover:opacity-100"
+                                                                }`}
                                                         >
-                                                            Clips
+                                                            {/* The animated full-rainbow background wrapper */}
+                                                            <div
+                                                                className="absolute top-1/2 left-1/2 w-[300%] aspect-square -translate-x-1/2 -translate-y-1/2 animate-[spin_3s_linear_infinite]"
+                                                                style={{
+                                                                    background: 'conic-gradient(from 0deg, #ef4444 0%, #eab308 16%, #22c55e 33%, #0ea5e9 50%, #3b82f6 66%, #a855f7 83%, #ef4444 100%)'
+                                                                }}
+                                                            ></div>
+
+                                                            {/* The actual item content covering the center to create a 'border' effect */}
+                                                            <div className={`relative w-full h-full px-2 py-1.5 rounded-[3px] bg-white dark:bg-gray-800 ${(folder || defaultFolder) === defaultFolder ? "bg-blue-50/90 dark:bg-blue-900/90 font-medium" : "hover:bg-gray-100 dark:hover:bg-gray-700 pointer-events-none"
+                                                                }`}>
+                                                                {defaultFolder} <span className="text-[10px] ml-1 opacity-70">(Suggested)</span>
+                                                            </div>
                                                         </DropdownMenuItem>
-                                                        {availableFolders.map(folderName => (
+                                                        {availableFolders.filter(f => f !== defaultFolder).map(folderName => (
                                                             <DropdownMenuItem
                                                                 key={folderName}
                                                                 onClick={() => setFileFolder(id, folderName)}

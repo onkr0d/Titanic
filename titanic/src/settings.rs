@@ -24,6 +24,8 @@ pub struct Settings {
     pub sentry_environment: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sentry_traces_sample_rate: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_folder: Option<String>,
 }
 
 impl Settings {

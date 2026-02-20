@@ -25,6 +25,10 @@ export interface FoldersResponse {
     folders: string[];
 }
 
+export interface AppConfig {
+    default_folder: string | null;
+}
+
 export interface UploadProgress {
     progress: number;
     loaded: number;
@@ -93,6 +97,24 @@ export const getFolders = async (): Promise<string[]> => {
     } catch (error) {
         console.error('Error fetching folders:', error);
         return [];
+    }
+};
+
+export const getAppConfig = async (): Promise<AppConfig | null> => {
+    try {
+        const headers = await authHeaders();
+        const response = await fetch(`${API_BASE_URL}/config`, {
+            headers
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch app config');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching app config:', error);
+        return null;
     }
 };
 

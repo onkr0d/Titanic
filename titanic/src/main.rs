@@ -43,12 +43,6 @@ struct UploadResponse {
     folder: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct SpaceResponse {
-    total: u64,
-    used: u64,
-    free: u64,
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct FoldersResponse {
@@ -286,11 +280,7 @@ async fn space_check(
 
 async fn list_folders(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
 ) -> Result<Json<FoldersResponse>, AppError> {
-    // Verify Firebase authentication
-    let _user = state.auth.verify_token(&headers).await?;
-
     let folders = state.uploader.list_folders().await?;
 
     Ok(Json(FoldersResponse { folders }))

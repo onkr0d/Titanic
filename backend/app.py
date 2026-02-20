@@ -15,7 +15,7 @@ from jobs.job import compress_video, upload_video_to_umbrel
 import firebase_admin
 from firebase_admin import credentials, auth, app_check
 from functools import wraps
-import shutil
+
 import jwt
 import aiofiles
 import sentry_sdk
@@ -309,9 +309,56 @@ async def health_check():
 @app.route('/api/space')
 @verify_firebase_token
 async def space():
-    # check how much disk space is left
-    total, used, free = shutil.disk_usage(UPLOAD_FOLDER)
-    return jsonify({"total": total, "used": used, "free": free}), 200
+    # Forward to Umbrel server to get actual disk space of the mounted volume
+    try:
+        logger.debug("Fetching disk space from Umbrel server")
+        umbrel_base_url = os.environ.get('UMBREL_SERVER_URL', 'http://umbrel:3029')
+        umbrel_url = umbrel_base_url + '/api/space'
+
+        # Forward the authorization headers
+        headers = {
+            'Authorization': request.headers.get('Authorization'),
+        }
+
+        response = requests.get(umbrel_url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        space_data = response.json()
+        return jsonify(space_data), 200
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching space from Umbrel: {str(e)}")
+        return jsonify({'error': f'Failed to fetch space from Umbrel: {str(e)}'}), 502
+    except Exception as e:
+        logger.error(f"Unexpected error fetching space: {str(e)}")
+        return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
+
+@app.route('/api/config')
+@verify_firebase_token
+async def get_config():
+    """Get app configuration derived from Umbrel settings"""
+    try:
+        logger.debug("Fetching settings from Umbrel server for config extraction")
+        umbrel_base_url = os.environ.get('UMBREL_SERVER_URL', 'http://umbrel:3029')
+        umbrel_url = umbrel_base_url + '/api/settings'
+
+        # Forward the authorization headers
+        headers = {
+            'Authorization': request.headers.get('Authorization'),
+        }
+
+        response = requests.get(umbrel_url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        settings_data = response.json()
+        return jsonify({
+            "default_folder": settings_data.get("default_folder")
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error fetching config from Umbrel settings: {str(e)}")
+        # If settings are inaccessible, just return empty config (it will default to 'Clips' in frontend)
+        return jsonify({"default_folder": None}), 200
 
 @app.route('/api/folders')
 @verify_firebase_token

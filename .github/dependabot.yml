@@ -4,7 +4,12 @@ updates:
   - package-ecosystem: "bun"
     directory: "frontend/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+    groups:
+      minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
 
   # cloud functions
   # google cloud run doesn't support bun :(
@@ -12,14 +17,35 @@ updates:
     directory: "frontend/functions/"
     schedule:
       interval: "weekly"
+    groups:
+      minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
 
-  # backend flask
+  # backend quart
   - package-ecosystem: "pip"
     directory: "backend/"
     schedule:
       interval: "weekly"
+    groups:
+      minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
 
-  # backend docker  
+  # titanic rust service
+  - package-ecosystem: "cargo"
+    directory: "titanic/"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # backend docker
   - package-ecosystem: "docker"
     directory: "backend/"
     schedule:

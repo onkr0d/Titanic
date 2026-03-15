@@ -23,7 +23,7 @@ updates:
           - "minor"
           - "patch"
 
-  # backend flask
+  # backend quart
   - package-ecosystem: "pip"
     directory: "backend/"
     schedule:

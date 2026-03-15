@@ -180,7 +180,9 @@ mod tests {
 
     #[test]
     fn load_missing_file_returns_defaults() {
-        let settings = Settings::load(Path::new("/nonexistent/path/settings.json"));
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("does_not_exist").join("settings.json");
+        let settings = Settings::load(&path);
         assert!(settings.sentry_dsn.is_none());
         assert!(settings.sentry_environment.is_none());
         assert!(settings.sentry_traces_sample_rate.is_none());

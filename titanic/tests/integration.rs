@@ -14,7 +14,8 @@ use tokio::sync::Mutex;
 // We build the router the same way `main()` does, but pointed at temp dirs.
 
 /// Build a test router with dev-mode auth and temp directories.
-fn test_app() -> (Router, tempfile::TempDir) {
+/// State is consumed via `.with_state()`, so the router is `Router<()>`.
+fn test_app() -> (Router<()>, tempfile::TempDir) {
     // Create temp dirs for media and data
     let tmp = tempfile::tempdir().unwrap();
     let media_dir = tmp.path().join("media");

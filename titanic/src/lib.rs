@@ -60,7 +60,8 @@ const CONTENT_LENGTH_LIMIT: usize = 10 * 1024 * 1024 * 1024; // 10GB
 
 /// Build the axum router with all routes and middleware.
 /// Extracted from `main()` so integration tests can use it.
-pub fn build_router(state: Arc<AppState>) -> Router {
+/// State is consumed via `.with_state()`, so the returned router is `Router<()>`.
+pub fn build_router(state: Arc<AppState>) -> Router<()> {
     let cors = CorsLayer::new()
         .allow_origin([
             HeaderValue::from_static("https://titanic.ivan.boston"),
@@ -110,9 +111,14 @@ async fn upload_video(
     mut multipart: Multipart,
 ) -> Result<Json<UploadResponse>, AppError> {
     info!("Received an upload request");
-    // Log all headers for debugging
+    // Log headers for debugging, redacting sensitive values
+    const SENSITIVE_HEADERS: &[&str] = &["authorization", "cookie", "x-firebase-appcheck"];
     for (key, value) in headers.iter() {
-        info!("Header: {} = {:?}", key.as_str(), value);
+        if SENSITIVE_HEADERS.contains(&key.as_str()) {
+            info!("Header: {} = [REDACTED]", key.as_str());
+        } else {
+            info!("Header: {} = {:?}", key.as_str(), value);
+        }
     }
 
     // Verify Firebase authentication

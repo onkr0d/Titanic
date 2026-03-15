@@ -58,8 +58,9 @@ RUN addgroup -g 1000 -S flask && \
 RUN mkdir -p /app/redis-data && \
     chown -R flask:flask /app/redis-data
 
-# Note: Don't create videos directories here - they're created at runtime
-# and the volume mount will override any directories created during build
+# Create videos directories with proper permissions so named volume mounts work
+RUN mkdir -p /app/videos/uncompressed /app/videos/compressed && \
+    chown -R flask:flask /app/videos
 
 # Ensure startup script is executable
 RUN chmod u+x start.sh

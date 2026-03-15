@@ -60,19 +60,20 @@ app = cors(app,
      allow_origin=origins,
      allow_headers=["Content-Type","Authorization","X-Firebase-AppCheck", "baggage", "sentry-trace"])
 
-# Initialize Firebase Admin
-cred_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'admin-sdk-cred.json'))
-cred = credentials.Certificate(cred_path)
+# Initialize Firebase Admin (skipped in dev mode — no credentials file available)
+if not IS_DEV:
+    cred_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'admin-sdk-cred.json'))
+    cred = credentials.Certificate(cred_path)
 
-# wait! before we initialize Firebase, we need to prevent it from spamming us with debug:
-logging.getLogger("cachecontrol").setLevel(logging.WARNING)
-logging.getLogger("cachecontrol.controller").setLevel(logging.WARNING)
+    # wait! before we initialize Firebase, we need to prevent it from spamming us with debug:
+    logging.getLogger("cachecontrol").setLevel(logging.WARNING)
+    logging.getLogger("cachecontrol.controller").setLevel(logging.WARNING)
 
-logging.getLogger("google.auth").setLevel(logging.WARNING)
-logging.getLogger("google.auth.transport").setLevel(logging.WARNING)
-logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("google.auth").setLevel(logging.WARNING)
+    logging.getLogger("google.auth.transport").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-firebase_admin.initialize_app(cred)
+    firebase_admin.initialize_app(cred)
 
 # Configure upload settings
 UPLOAD_FOLDER = os.path.abspath('videos')  # Base directory for videos

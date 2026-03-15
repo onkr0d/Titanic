@@ -249,3 +249,93 @@ pub struct SpaceInfo {
     pub used: u64,
     pub free: u64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs as std_fs;
+
+    #[test]
+    fn unique_filename_no_collision() {
+        let dir = tempfile::tempdir().unwrap();
+        let uploader = VideoUploader {
+            plex_media_path: dir.path().to_path_buf(),
+        };
+
+        let result = uploader.generate_unique_filename(dir.path(), "video.mp4");
+        assert_eq!(result, "video.mp4");
+    }
+
+    #[test]
+    fn unique_filename_with_collision() {
+        let dir = tempfile::tempdir().unwrap();
+        // Create a file that will collide
+        std_fs::write(dir.path().join("video.mp4"), b"existing").unwrap();
+
+        let uploader = VideoUploader {
+            plex_media_path: dir.path().to_path_buf(),
+        };
+
+        let result = uploader.generate_unique_filename(dir.path(), "video.mp4");
+        assert_eq!(result, "video_1.mp4");
+    }
+
+    #[test]
+    fn unique_filename_multiple_collisions() {
+        let dir = tempfile::tempdir().unwrap();
+        std_fs::write(dir.path().join("video.mp4"), b"existing").unwrap();
+        std_fs::write(dir.path().join("video_1.mp4"), b"existing").unwrap();
+        std_fs::write(dir.path().join("video_2.mp4"), b"existing").unwrap();
+
+        let uploader = VideoUploader {
+            plex_media_path: dir.path().to_path_buf(),
+        };
+
+        let result = uploader.generate_unique_filename(dir.path(), "video.mp4");
+        assert_eq!(result, "video_3.mp4");
+    }
+
+    #[tokio::test]
+    async fn list_folders_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let clips_dir = dir.path().join("Clips");
+        std_fs::create_dir_all(&clips_dir).unwrap();
+
+        let uploader = VideoUploader {
+            plex_media_path: dir.path().to_path_buf(),
+        };
+
+        let folders = uploader.list_folders().await.unwrap();
+        assert!(folders.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_folders_mixed_files_and_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let clips_dir = dir.path().join("Clips");
+        std_fs::create_dir_all(&clips_dir).unwrap();
+
+        // Create some subdirs and files
+        std_fs::create_dir(clips_dir.join("Movies")).unwrap();
+        std_fs::create_dir(clips_dir.join("Anime")).unwrap();
+        std_fs::write(clips_dir.join("stray_file.txt"), b"not a dir").unwrap();
+
+        let uploader = VideoUploader {
+            plex_media_path: dir.path().to_path_buf(),
+        };
+
+        let folders = uploader.list_folders().await.unwrap();
+        // Should only include directories, sorted alphabetically
+        assert_eq!(folders, vec!["Anime", "Movies"]);
+    }
+
+    #[test]
+    fn uploader_new_creates_missing_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let media_path = dir.path().join("new_media_dir");
+
+        let uploader = VideoUploader::new(media_path.to_str().unwrap());
+        assert!(uploader.is_ok());
+        assert!(media_path.exists());
+    }
+}

@@ -240,7 +240,7 @@ async fn list_folders(
 
 pub(crate) fn is_valid_video_file(filename: &str) -> bool {
     let valid_extensions = [
-        "mp4", "avi", "mov", "mkv", "wmv", "flv", "m4v", "avi", "webm", "ts",
+        "mp4", "avi", "mov", "mkv", "wmv", "flv", "m4v", "webm", "ts",
     ];
 
     if let Some(extension) = filename.split('.').next_back() {

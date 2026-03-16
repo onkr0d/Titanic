@@ -1,6 +1,6 @@
 //! Integration tests that spin up the full axum router and exercise
 //! endpoints via `tower::ServiceExt::oneshot`.  All tests run with
-//! `IS_DEV=true` so Firebase auth is bypassed.
+//! `is_dev: true` in the config so Firebase auth is bypassed.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode, Method, header};
@@ -26,9 +26,9 @@ fn test_app() -> (Router<()>, tempfile::TempDir) {
     let config = titanic::config::Config {
         bind_address: "0.0.0.0:0".into(),
         firebase_project_id: "test-project".into(),
-        plex_media_path: media_dir.to_str().unwrap().into(),
+        plex_media_path: media_dir.to_string_lossy().into_owned(),
         is_dev: true,
-        data_dir: data_dir.to_str().unwrap().into(),
+        data_dir: data_dir.to_string_lossy().into_owned(),
     };
 
     let auth = titanic::auth::FirebaseAuth::new(&config).unwrap();

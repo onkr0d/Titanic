@@ -12,7 +12,7 @@ updates:
           - "patch"
 
   # cloud functions
-  - package-ecosystem: "bun"
+  - package-ecosystem: "bun" # lfg wagmi
     directory: "frontend/functions/"
     schedule:
       interval: "weekly"

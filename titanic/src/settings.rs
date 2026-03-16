@@ -4,6 +4,7 @@ use axum::{
     http::{StatusCode, header},
     response::IntoResponse,
 };
+use path_clean::PathClean;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -53,7 +54,11 @@ impl Settings {
 
     /// Resolve the path to the settings file for a given data directory.
     pub fn file_path(data_dir: &str) -> PathBuf {
-        Path::new(data_dir).join("settings.json")
+        let base = Path::new(data_dir);
+        // Canonicalize to resolve symlinks and .. components; fall back to
+        // lexical cleaning so .. is still stripped when the path doesn't exist yet.
+        let canonical_base = base.canonicalize().unwrap_or_else(|_| base.to_path_buf().clean());
+        canonical_base.join("settings.json")
     }
 }
 
@@ -222,8 +227,10 @@ mod tests {
 
     #[test]
     fn file_path_construction() {
-        let path = Settings::file_path("/data");
-        assert_eq!(path, PathBuf::from("/data/settings.json"));
+        let dir = tempfile::tempdir().unwrap();
+        let path = Settings::file_path(dir.path().to_str().unwrap());
+        let expected = dir.path().canonicalize().unwrap().join("settings.json");
+        assert_eq!(path, expected);
     }
 
     #[test]

@@ -60,20 +60,25 @@ app = cors(app,
      allow_origin=origins,
      allow_headers=["Content-Type","Authorization","X-Firebase-AppCheck", "baggage", "sentry-trace"])
 
-# Initialize Firebase Admin (skipped in dev mode — no credentials file available)
-if not IS_DEV:
-    cred_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'admin-sdk-cred.json'))
+# Initialize Firebase Admin if credentials are available.
+# In dev/CI without credentials we warn and continue; in production we fail hard.
+cred_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'admin-sdk-cred.json'))
+if os.path.exists(cred_path):
     cred = credentials.Certificate(cred_path)
 
-    # wait! before we initialize Firebase, we need to prevent it from spamming us with debug:
+    # Prevent Firebase libraries from spamming debug logs
     logging.getLogger("cachecontrol").setLevel(logging.WARNING)
     logging.getLogger("cachecontrol.controller").setLevel(logging.WARNING)
-
     logging.getLogger("google.auth").setLevel(logging.WARNING)
     logging.getLogger("google.auth.transport").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
     firebase_admin.initialize_app(cred)
+    logger.info("Firebase Admin SDK initialized")
+elif IS_DEV:
+    logger.warning("Firebase credentials not found at %s — running without Firebase (dev/CI mode)", cred_path)
+else:
+    raise FileNotFoundError(f"Firebase credentials file not found: {cred_path}")
 
 # Configure upload settings
 UPLOAD_FOLDER = os.path.abspath('videos')  # Base directory for videos

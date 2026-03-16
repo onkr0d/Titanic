@@ -49,6 +49,7 @@ def initialize_firebase():
     """
     Initialize Firebase Admin SDK if not already initialized.
     This is needed because RQ workers run in separate processes.
+    In dev/CI without credentials we warn and continue; in production we fail hard.
     """
     try:
         # Check if Firebase is already initialized
@@ -64,6 +65,9 @@ def initialize_firebase():
                                                'admin-sdk-cred.json'))
 
         if not os.path.exists(cred_path):
+            if _is_dev:
+                logger.warning("Firebase credentials not found at %s — running without Firebase (dev/CI mode)", cred_path)
+                return
             raise FileNotFoundError(f"Firebase credentials file not found: {cred_path}")
 
         cred = credentials.Certificate(cred_path)
@@ -518,7 +522,8 @@ def upload_video_to_umbrel(input_file=None):
     
     # Extract folder from metadata if present
     folder = job.meta.get('X-Folder', None)
-    logger.debug(f"Job meta: {job.meta}")
+    safe_meta = {k: v for k, v in job.meta.items() if k not in ('refresh_token',)}
+    logger.debug(f"Job meta: {safe_meta}")
     logger.debug(f"Extracted folder from metadata: {folder}")
     
     # Build the multipart form data manually to avoid memory issues
@@ -556,7 +561,7 @@ def upload_video_to_umbrel(input_file=None):
         monitor = MultipartEncoderMonitor(encoder, monitor_callback)
         
         auth_headers['Content-Type'] = monitor.content_type
-        logger.debug(f"Uploading with fresh headers: {[k for k in auth_headers.keys()]}")  # Log header keys only
+        logger.debug("Uploading with fresh headers (Authorization, Content-Type)")
 
         upload_umbrel_url = umbrel_url + '/api/upload'
         

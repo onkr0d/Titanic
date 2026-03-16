@@ -27,6 +27,7 @@ hex = "0.4"
 path-slash = "0.2"
 dotenvy = "0.15.7"
 sanitize-filename = "0.6.0"
+path-clean = "1.0.1"
 tokio-util = { version = "0.7.18", features = ["io"] }
 openssl = { version = "0.10", features = ["vendored"] }
 sentry = "0.46.1"

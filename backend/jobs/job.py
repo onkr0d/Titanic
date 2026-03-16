@@ -15,11 +15,12 @@ from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 import sentry_sdk
 
 # This configures logging for any process that imports this module.
-# It's safe to call here because logging.basicConfig() does nothing
-# if a handler is already configured for the root logger.
-# This will ensure that RQ workers have logging configured.
+# When imported from app.py, this runs FIRST (before app.py's basicConfig),
+# so the level set here wins — basicConfig is a no-op if handlers already exist.
+# This also ensures that standalone RQ workers have logging configured.
+_is_dev = os.environ.get('IS_DEV', 'false').lower() == 'true'
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.DEBUG if _is_dev else logging.INFO,
     format='%(asctime)s - %(process)d - %(name)s - %(levelname)s - %(message)s'
 )
 

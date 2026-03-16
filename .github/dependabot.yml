@@ -12,8 +12,7 @@ updates:
           - "patch"
 
   # cloud functions
-  # google cloud run doesn't support bun :(
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directory: "frontend/functions/"
     schedule:
       interval: "weekly"

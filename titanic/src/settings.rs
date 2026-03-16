@@ -4,6 +4,7 @@ use axum::{
     http::{StatusCode, header},
     response::IntoResponse,
 };
+use path_clean::PathClean;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -54,9 +55,9 @@ impl Settings {
     /// Resolve the path to the settings file for a given data directory.
     pub fn file_path(data_dir: &str) -> PathBuf {
         let base = Path::new(data_dir);
-        // Canonicalize to resolve symlinks and .. components, preventing
-        // path-injection via a crafted DATA_DIR value.
-        let canonical_base = base.canonicalize().unwrap_or_else(|_| base.to_path_buf());
+        // Canonicalize to resolve symlinks and .. components; fall back to
+        // lexical cleaning so .. is still stripped when the path doesn't exist yet.
+        let canonical_base = base.canonicalize().unwrap_or_else(|_| base.to_path_buf().clean());
         canonical_base.join("settings.json")
     }
 }

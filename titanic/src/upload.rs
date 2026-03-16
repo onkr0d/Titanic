@@ -15,7 +15,7 @@ fn ensure_path_within(base: &Path, target: &Path) -> Result<PathBuf, AppError> {
     let absolute_base = base.clean();
 
     if !absolute_target.starts_with(&absolute_base) {
-        return Err(AppError::InternalError(
+        return Err(AppError::UploadError(
             "Path escapes base directory".to_string(),
         ));
     }

@@ -24,10 +24,15 @@ base64 = "0.22.1"
 sha2 = "0.10"
 hmac = "0.12"
 hex = "0.4"
-tempfile = "3.8"
-path-slash = "0.2" 
+path-slash = "0.2"
 dotenvy = "0.15.7"
 sanitize-filename = "0.6.0"
 tokio-util = { version = "0.7.11", features = ["io"] }
 openssl = { version = "0.10", features = ["vendored"] }
 sentry = "0.46.1"
+
+[dev-dependencies]
+hyper = "1"
+http-body-util = "0.1"
+mime = "0.3"
+tempfile = "3.8"

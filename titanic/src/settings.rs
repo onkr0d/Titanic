@@ -173,3 +173,67 @@ pub async fn put_settings(
 
     Ok(Json(payload))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_missing_file_returns_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("does_not_exist").join("settings.json");
+        let settings = Settings::load(&path);
+        assert!(settings.sentry_dsn.is_none());
+        assert!(settings.sentry_environment.is_none());
+        assert!(settings.sentry_traces_sample_rate.is_none());
+        assert!(settings.default_folder.is_none());
+    }
+
+    #[test]
+    fn save_and_load_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+
+        let original = Settings {
+            sentry_dsn: Some("https://example@sentry.io/123".into()),
+            sentry_environment: Some("test".into()),
+            sentry_traces_sample_rate: Some(0.5),
+            default_folder: Some("Movies".into()),
+        };
+
+        original.save(&path).unwrap();
+        let loaded = Settings::load(&path);
+
+        assert_eq!(loaded.sentry_dsn, original.sentry_dsn);
+        assert_eq!(loaded.sentry_environment, original.sentry_environment);
+        assert_eq!(loaded.sentry_traces_sample_rate, original.sentry_traces_sample_rate);
+        assert_eq!(loaded.default_folder, original.default_folder);
+    }
+
+    #[test]
+    fn load_malformed_json_returns_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        std::fs::write(&path, "not json at all").unwrap();
+
+        let settings = Settings::load(&path);
+        assert!(settings.sentry_dsn.is_none());
+    }
+
+    #[test]
+    fn file_path_construction() {
+        let path = Settings::file_path("/data");
+        assert_eq!(path, PathBuf::from("/data/settings.json"));
+    }
+
+    #[test]
+    fn save_creates_parent_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested").join("deep").join("settings.json");
+
+        let settings = Settings::default();
+        settings.save(&path).unwrap();
+
+        assert!(path.exists());
+    }
+}

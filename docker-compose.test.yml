@@ -1,0 +1,64 @@
+# Docker Compose for automated testing
+# Usage: docker compose -f docker-compose.test.yml up --build -d
+#        bash tests/e2e/test_e2e.sh
+#        docker compose -f docker-compose.test.yml down -v
+
+services:
+  umbrel:
+    build:
+      context: ./titanic
+      dockerfile: Dockerfile
+      cache_from:
+        - type=gha,scope=e2e-umbrel
+      cache_to:
+        - type=gha,mode=max,scope=e2e-umbrel
+    container_name: titanic_test_umbrel
+    environment:
+      - FIREBASE_PROJECT_ID=test-project
+      - IS_DEV=true
+      - BIND_ADDRESS=0.0.0.0:3029
+      - PLEX_MEDIA_PATH=/downloads
+      - DATA_DIR=/data
+    volumes:
+      - test_downloads:/downloads
+      - test_data:/data
+    ports:
+      - "3029:3029"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3029/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  flask:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      cache_from:
+        - type=gha,scope=e2e-flask
+      cache_to:
+        - type=gha,mode=max,scope=e2e-flask
+    container_name: titanic_test_flask
+    command: >
+      sh -c "redis-server &
+             python app.py"
+    environment:
+      - IS_DEV=true
+      - PYTHONUNBUFFERED=1
+      - UMBREL_SERVER_URL=http://umbrel:3029
+    ports:
+      - "6969:5000"
+    volumes:
+      - test_videos:/app/videos
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  test_downloads:
+  test_data:
+  test_videos:

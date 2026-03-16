@@ -220,3 +220,62 @@ impl FirebaseAuth {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dev_auth() -> FirebaseAuth {
+        FirebaseAuth {
+            project_id: "test-project".into(),
+            client: Client::new(),
+            public_keys: Arc::new(RwLock::new(HashMap::new())),
+            is_dev: true,
+        }
+    }
+
+    fn prod_auth() -> FirebaseAuth {
+        FirebaseAuth {
+            project_id: "test-project".into(),
+            client: Client::new(),
+            public_keys: Arc::new(RwLock::new(HashMap::new())),
+            is_dev: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn dev_mode_bypasses_auth() {
+        let auth = dev_auth();
+        let headers = HeaderMap::new(); // no auth header needed
+
+        let user = auth.verify_token(&headers).await.unwrap();
+        assert_eq!(user.uid, "dev-user");
+        assert_eq!(user.email, "dev@example.com");
+        assert!(user.email_verified);
+    }
+
+    #[tokio::test]
+    async fn missing_auth_header_returns_error() {
+        let auth = prod_auth();
+        let headers = HeaderMap::new();
+
+        let err = auth.verify_token(&headers).await.unwrap_err();
+        match err {
+            AppError::AuthError(msg) => assert!(msg.contains("authorization header")),
+            other => panic!("Expected AuthError, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn malformed_auth_header_returns_error() {
+        let auth = prod_auth();
+        let mut headers = HeaderMap::new();
+        headers.insert("Authorization", "Token abc123".parse().unwrap());
+
+        let err = auth.verify_token(&headers).await.unwrap_err();
+        match err {
+            AppError::AuthError(msg) => assert!(msg.contains("Invalid authorization header")),
+            other => panic!("Expected AuthError, got: {other:?}"),
+        }
+    }
+}

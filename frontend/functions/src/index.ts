@@ -1,4 +1,4 @@
-import { beforeUserCreated} from "firebase-functions/v2/identity";
+import { beforeUserCreated } from "firebase-functions/v2/identity";
 import * as logger from "firebase-functions/logger";
 import { HttpsError } from "firebase-functions/v2/identity";
 

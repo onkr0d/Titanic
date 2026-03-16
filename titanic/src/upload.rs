@@ -1,9 +1,27 @@
 use crate::error::AppError;
+use path_clean::PathClean;
 use serde::{Deserialize, Serialize};
 use std::fs as std_fs;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tracing::info;
+
+/// Verify that `target` resolves to a location within `base`.
+///
+/// Uses lexical cleaning (resolving `.` and `..`) rather than filesystem
+/// canonicalization, so it works for paths that don't exist yet.
+fn ensure_path_within(base: &Path, target: &Path) -> Result<PathBuf, AppError> {
+    let absolute_target = base.join(target).clean();
+    let absolute_base = base.clean();
+
+    if !absolute_target.starts_with(&absolute_base) {
+        return Err(AppError::InternalError(
+            "Path escapes base directory".to_string(),
+        ));
+    }
+
+    Ok(absolute_target)
+}
 
 pub struct VideoUploader {
     plex_media_path: PathBuf,
@@ -29,8 +47,14 @@ impl VideoUploader {
             )));
         }
 
+        let canonical_path = path.canonicalize().map_err(|e| {
+            AppError::ConfigError(format!(
+                "Failed to canonicalize media path '{plex_media_path}': {e}"
+            ))
+        })?;
+
         Ok(VideoUploader {
-            plex_media_path: path,
+            plex_media_path: canonical_path,
         })
     }
 
@@ -53,6 +77,7 @@ impl VideoUploader {
         let clips_dir = self.plex_media_path.join("Clips");
 
         // Ensure the Clips directory exists
+        let clips_dir = ensure_path_within(&self.plex_media_path, &clips_dir)?;
         std_fs::create_dir_all(&clips_dir).map_err(|e| {
             AppError::InternalError(format!("Failed to create Clips directory: {e}"))
         })?;
@@ -67,6 +92,7 @@ impl VideoUploader {
                 // Sanitize folder name as well
                 let sanitized_folder = sanitize_filename::sanitize(folder_name);
                 let folder_dir = clips_dir.join(&sanitized_folder);
+                let folder_dir = ensure_path_within(&self.plex_media_path, &folder_dir)?;
 
                 info!("Creating folder directory: {:?}", folder_dir);
                 // Ensure the folder exists
@@ -87,14 +113,16 @@ impl VideoUploader {
         // Generate unique filename to prevent overwriting
         // Check for existing files with the same name before generating a unique one
         let potential_path = target_dir.join(&sanitized_filename);
+        let potential_path = ensure_path_within(&self.plex_media_path, &potential_path)?;
         let file_exists = std_fs::metadata(&potential_path).is_ok();
         info!(
             "Checking if file exists at {:?}: {}",
             potential_path, file_exists
         );
 
-        let unique_filename = self.generate_unique_filename(&target_dir, &sanitized_filename);
+        let unique_filename = self.generate_unique_filename(&target_dir, &sanitized_filename)?;
         let target_path = target_dir.join(&unique_filename);
+        let target_path = ensure_path_within(&self.plex_media_path, &target_path)?;
 
         if unique_filename != sanitized_filename {
             info!(
@@ -119,12 +147,13 @@ impl VideoUploader {
     }
 
     // Generate a unique filename by appending counter if file already exists
-    fn generate_unique_filename(&self, directory: &Path, filename: &str) -> String {
+    fn generate_unique_filename(&self, directory: &Path, filename: &str) -> Result<String, AppError> {
         let path = directory.join(filename);
+        let path = ensure_path_within(&self.plex_media_path, &path)?;
 
         // Use std_fs (std::fs) instead of fs (tokio::fs) since this is a synchronous function
         if std_fs::metadata(&path).is_err() {
-            return filename.to_string();
+            return Ok(filename.to_string());
         }
 
         // Split filename into base and extension
@@ -145,8 +174,9 @@ impl VideoUploader {
             };
 
             let new_path = directory.join(&new_filename);
+            let new_path = ensure_path_within(&self.plex_media_path, &new_path)?;
             if std_fs::metadata(&new_path).is_err() {
-                return new_filename;
+                return Ok(new_filename);
             }
             counter += 1;
         }
@@ -162,6 +192,7 @@ impl VideoUploader {
 
     pub async fn list_folders(&self) -> Result<Vec<String>, AppError> {
         let clips_dir = self.plex_media_path.join("Clips");
+        let clips_dir = ensure_path_within(&self.plex_media_path, &clips_dir)?;
 
         // Ensure Clips directory exists
         std_fs::create_dir_all(&clips_dir).map_err(|e| {
@@ -263,40 +294,43 @@ mod tests {
     #[test]
     fn unique_filename_no_collision() {
         let dir = tempfile::tempdir().unwrap();
+        let canonical = dir.path().canonicalize().unwrap();
         let uploader = VideoUploader {
-            plex_media_path: dir.path().to_path_buf(),
+            plex_media_path: canonical.clone(),
         };
 
-        let result = uploader.generate_unique_filename(dir.path(), "video.mp4");
+        let result = uploader.generate_unique_filename(&canonical, "video.mp4").unwrap();
         assert_eq!(result, "video.mp4");
     }
 
     #[test]
     fn unique_filename_with_collision() {
         let dir = tempfile::tempdir().unwrap();
+        let canonical = dir.path().canonicalize().unwrap();
         // Create a file that will collide
-        std_fs::write(dir.path().join("video.mp4"), b"existing").unwrap();
+        std_fs::write(canonical.join("video.mp4"), b"existing").unwrap();
 
         let uploader = VideoUploader {
-            plex_media_path: dir.path().to_path_buf(),
+            plex_media_path: canonical.clone(),
         };
 
-        let result = uploader.generate_unique_filename(dir.path(), "video.mp4");
+        let result = uploader.generate_unique_filename(&canonical, "video.mp4").unwrap();
         assert_eq!(result, "video_1.mp4");
     }
 
     #[test]
     fn unique_filename_multiple_collisions() {
         let dir = tempfile::tempdir().unwrap();
-        std_fs::write(dir.path().join("video.mp4"), b"existing").unwrap();
-        std_fs::write(dir.path().join("video_1.mp4"), b"existing").unwrap();
-        std_fs::write(dir.path().join("video_2.mp4"), b"existing").unwrap();
+        let canonical = dir.path().canonicalize().unwrap();
+        std_fs::write(canonical.join("video.mp4"), b"existing").unwrap();
+        std_fs::write(canonical.join("video_1.mp4"), b"existing").unwrap();
+        std_fs::write(canonical.join("video_2.mp4"), b"existing").unwrap();
 
         let uploader = VideoUploader {
-            plex_media_path: dir.path().to_path_buf(),
+            plex_media_path: canonical.clone(),
         };
 
-        let result = uploader.generate_unique_filename(dir.path(), "video.mp4");
+        let result = uploader.generate_unique_filename(&canonical, "video.mp4").unwrap();
         assert_eq!(result, "video_3.mp4");
     }
 
@@ -307,7 +341,7 @@ mod tests {
         std_fs::create_dir_all(&clips_dir).unwrap();
 
         let uploader = VideoUploader {
-            plex_media_path: dir.path().to_path_buf(),
+            plex_media_path: dir.path().canonicalize().unwrap(),
         };
 
         let folders = uploader.list_folders().await.unwrap();
@@ -326,7 +360,7 @@ mod tests {
         std_fs::write(clips_dir.join("stray_file.txt"), b"not a dir").unwrap();
 
         let uploader = VideoUploader {
-            plex_media_path: dir.path().to_path_buf(),
+            plex_media_path: dir.path().canonicalize().unwrap(),
         };
 
         let folders = uploader.list_folders().await.unwrap();

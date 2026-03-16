@@ -60,11 +60,6 @@ jobs:
           driver-opts: network=host
 
       - name: Build and start services
-        env:
-          DOCKER_BUILDKIT: 1
-          BUILDKIT_INLINE_CACHE: 1
-          ACTIONS_CACHE_URL: ${{ env.ACTIONS_CACHE_URL }}
-          ACTIONS_RUNTIME_TOKEN: ${{ env.ACTIONS_RUNTIME_TOKEN }}
         run: docker compose -f docker-compose.test.yml up --build -d
 
       - name: Run E2E tests

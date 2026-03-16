@@ -52,6 +52,11 @@ impl VideoUploader {
         // Always use the Clips directory structure
         let clips_dir = self.plex_media_path.join("Clips");
 
+        // Ensure the Clips directory exists
+        std_fs::create_dir_all(&clips_dir).map_err(|e| {
+            AppError::InternalError(format!("Failed to create Clips directory: {e}"))
+        })?;
+
         // Determine the target directory and generate unique filename
         let (target_dir, _folder_info) = if let Some(folder_name) = folder {
             // Handle "Clips" as special case - save directly to Clips directory

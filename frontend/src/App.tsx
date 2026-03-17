@@ -27,6 +27,11 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
+// Enable Firebase App Check debug token in development
+if (import.meta.env.DEV) {
+    (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY_DEV;
+}
+
 // Initialize App Check with proper debug mode handling
 export const appCheck = initializeAppCheck(app, {
     provider: new ReCaptchaEnterpriseProvider(import.meta.env.DEV ? import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY_DEV : import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY),

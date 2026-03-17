@@ -58,6 +58,7 @@ if IS_DEV:
 # Apply CORS to Quart app
 app = cors(app,
      allow_origin=origins,
+     allow_methods=["GET", "POST", "OPTIONS"],
      allow_headers=["Content-Type","Authorization","X-Firebase-AppCheck", "baggage", "sentry-trace"])
 
 # Initialize Firebase Admin if credentials are available.

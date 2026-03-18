@@ -1,0 +1,24 @@
+name: CI - Firebase Functions
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/functions/**'
+      - '.github/workflows/functions-build.yml'
+
+jobs:
+  build_functions:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: SpicyPizza/create-envfile@v2.0
+        with:
+          env_key_ALLOWED_EMAILS: ${{ secrets.ALLOWED_EMAILS }}
+          fail_on_empty: true
+          directory: frontend/functions
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run build

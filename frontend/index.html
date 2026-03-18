@@ -23,20 +23,7 @@
     <meta name="twitter:image" content="https://titanic.ivan.boston/open-graph-preview.png" />
 
     <title>Titanic Uploader</title>
-    <script>
-      // Check for dark mode preference before the page loads
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        document.documentElement.classList.add('dark');
-        document.documentElement.style.backgroundColor = '#111827'; // dark:bg-gray-900
-      } else {
-        document.documentElement.style.backgroundColor = '#ffffff'; // bg-white
-      }
-      // Enable Firebase App Check debug token in development
-      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        const debugToken = '%VITE_FIREBASE_RECAPTCHA_SITE_KEY_DEV%';
-        self.FIREBASE_APPCHECK_DEBUG_TOKEN = debugToken;
-      }
-    </script>
+    <script src="/init.js"></script>
   </head>
   <body class="bg-white dark:bg-gray-900">
     <div id="root"></div>

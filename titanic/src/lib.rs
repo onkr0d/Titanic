@@ -73,7 +73,6 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
             Method::GET,
             Method::POST,
             Method::PUT,
-            Method::DELETE,
             Method::OPTIONS,
         ])
         .allow_headers([

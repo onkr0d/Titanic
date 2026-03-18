@@ -18,7 +18,7 @@ export default defineConfig({
     },
   },
   build: {
-    sourcemap: true,
+    sourcemap: "hidden",
     minify: true
   }
 })

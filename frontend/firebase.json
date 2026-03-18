@@ -4,7 +4,21 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "**/*.map"
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          { "key": "X-Content-Type-Options", "value": "nosniff" },
+          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' https://www.google.com https://www.gstatic.com https://apis.google.com https://www.recaptcha.net; style-src 'self' 'unsafe-inline'; connect-src 'self' https://compress.ivan.boston https://*.googleapis.com https://*.firebaseio.com https://*.sentry.io https://www.google.com; img-src 'self' data:; font-src 'self'; frame-src https://accounts.google.com https://www.google.com https://www.recaptcha.net https://*.firebaseapp.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'" },
+          { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+          { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
+          { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains" },
+          { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" }
+        ]
+      }
     ],
     "frameworksBackend": {
       "region": "us-east1"

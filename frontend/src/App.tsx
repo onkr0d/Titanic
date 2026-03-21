@@ -27,11 +27,6 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Enable Firebase App Check debug token in development
-if (import.meta.env.DEV) {
-    (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-}
-
 // Initialize App Check with proper debug mode handling
 export const appCheck = initializeAppCheck(app, {
     provider: new ReCaptchaEnterpriseProvider(import.meta.env.DEV ? import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY_DEV : import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY),
@@ -113,7 +108,7 @@ const App = () => {
                 <FileUploader />
             </div>
             <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 z-10">
-                <div className="md:hidden space-y-2 max-w-[50vw]">
+                <div className="md:hidden space-y-2">
                     <DiskSpaceIndicator />
                 </div>
                 <div className="hidden md:block">

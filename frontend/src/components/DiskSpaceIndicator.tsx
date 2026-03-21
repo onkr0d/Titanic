@@ -53,7 +53,7 @@ const DiskSpaceIndicator = () => {
 
     if (isLoading) {
         return (
-            <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-lg md:fixed md:bottom-4 md:left-4">
+            <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-lg w-fit md:fixed md:bottom-4 md:left-4">
                 <div className="w-4 h-4 border-2 border-t-blue-500 rounded-full animate-spin" />
                 <span className="text-sm text-gray-600 dark:text-gray-300">Loading space info...</span>
             </div>
@@ -62,7 +62,7 @@ const DiskSpaceIndicator = () => {
 
     if (error || !diskSpace) {
         return (
-            <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-lg md:fixed md:bottom-4 md:left-4">
+            <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-lg w-fit md:fixed md:bottom-4 md:left-4">
                 <ServerCrash className="w-4 h-4 text-red-500" />
                 <span className="text-sm text-gray-600 dark:text-gray-300">Space info unavailable</span>
             </div>
@@ -70,7 +70,7 @@ const DiskSpaceIndicator = () => {
     }
 
     return (
-        <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-lg md:fixed md:bottom-4 md:left-4">
+        <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-lg w-fit md:fixed md:bottom-4 md:left-4">
             <Fish className="w-4 h-4 text-gray-600 dark:text-gray-300" />
             <div className="flex flex-col w-full">
                 <div className="flex items-center gap-2">

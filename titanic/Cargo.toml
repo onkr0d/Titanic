@@ -18,7 +18,7 @@ thiserror = "2.0.18"
 uuid = { version = "1.22", features = ["v4"] }
 chrono = { version = "0.4.44", features = ["serde"] }
 futures = "0.3"
-reqwest = "0.12.5"
+reqwest = "0.13.2"
 jsonwebtoken = { version = "10.3.0",  features = ["aws_lc_rs"] }
 base64 = "0.22.1"
 sha2 = "0.10"

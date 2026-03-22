@@ -331,6 +331,7 @@ def compress_video(input_file: str) -> str:
                 os.remove(input_file)
         except FileNotFoundError:
             pass
+        logger.info(f"Video processing complete: {filename}")
         return output_file
 
     try:
@@ -371,6 +372,7 @@ def compress_video(input_file: str) -> str:
         logger.debug("FFmpeg (HEVC transcode): %s", " ".join(cmd))
         subprocess.run(cmd, capture_output=True, text=True, check=True)
         logger.debug(f"Video compression completed: {output_file}")
+        logger.info(f"Video processing complete: {filename}")
 
     except subprocess.CalledProcessError as e:
         logger.error("Video compression failed: %s", e)
@@ -577,6 +579,7 @@ def upload_video_to_umbrel(input_file=None):
         logger.debug(f"Umbrel upload response: {response_data}")
 
         logger.debug(f"Successfully uploaded video to Umbrel: {compressed_file}")
+        logger.info(f"Video uploaded to Umbrel: {os.path.basename(compressed_file)}")
     finally:
         if file_handle is not None:
             file_handle.close()

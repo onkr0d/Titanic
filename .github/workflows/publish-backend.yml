@@ -80,6 +80,6 @@ jobs:
           chmod 600 "$key_file"
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          scp -i "$key_file" \
+          scp -i "$key_file" -o BatchMode=yes \
             backend/docker-compose.run.yml \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/opc/TitanicProd/docker-compose.run.yml

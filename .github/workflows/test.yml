@@ -1,13 +1,8 @@
 name: CI - Tests
 
 on:
+  push:
   pull_request:
-    paths:
-      - 'titanic/**'
-      - 'backend/**'
-      - 'tests/**'
-      - 'docker-compose.test.yml'
-      - '.github/workflows/test.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

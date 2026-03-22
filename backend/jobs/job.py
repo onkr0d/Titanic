@@ -502,7 +502,7 @@ def upload_video_to_umbrel(input_file=None):
     if not compressed_file and input_file:
         compressed_file = input_file
         logger.debug(f"Using input file directly: {compressed_file}")
-    else:
+    elif not compressed_file:
         logger.error("No file provided - neither from dependency nor input parameter")
         raise ValueError("No file provided for upload")
     

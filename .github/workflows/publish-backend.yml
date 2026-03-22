@@ -76,7 +76,7 @@ jobs:
         run: |
           key_file="$(mktemp)"
           trap 'rm -f "$key_file"' EXIT
-          printf '%s' "${{ secrets.VPS_SSH_KEY }}" > "$key_file"
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > "$key_file"
           chmod 600 "$key_file"
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts

@@ -2,6 +2,8 @@ use anyhow::Result;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use titanic::auth::FirebaseAuth;
 use titanic::config::Config;
@@ -14,21 +16,24 @@ async fn main() -> Result<()> {
     // Load environment variables from .env file
     dotenvy::dotenv().ok();
 
-    // Initialize tracing
-    tracing_subscriber::fmt::init();
-
-    info!("Starting Titanic Umbrel server...");
-
     // Load configuration
     let config = Config::from_env()?;
-    info!("Configuration loaded: {:?}", config);
 
-    // Load persisted settings and initialise Sentry
+    // Load persisted settings and initialise Sentry (must happen before tracing setup)
     let settings_path = settings::Settings::file_path(&config.data_dir);
     let user_settings = settings::Settings::load(&settings_path);
     let sentry_guard = Arc::new(tokio::sync::Mutex::new(
         settings::init_sentry(&user_settings),
     ));
+
+    // Initialize tracing with Sentry layer
+    tracing_subscriber::fmt()
+        .finish()
+        .with(sentry::integrations::tracing::layer())
+        .init();
+
+    info!("Starting Titanic Umbrel server...");
+    info!("Configuration loaded: {:?}", config);
 
     // Initialize Firebase authentication
     let auth = FirebaseAuth::new(&config)?;

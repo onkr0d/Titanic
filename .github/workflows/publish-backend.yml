@@ -62,3 +62,18 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.target.scope }}
           cache-to: type=gha,mode=max,scope=${{ matrix.target.scope }}
           provenance: false
+
+  deploy-compose:
+    needs: build-and-push-backend
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Copy compose file to VPS
+        run: |
+          echo "${{ secrets.VPS_SSH_KEY }}" > key && chmod 600 key
+          scp -o StrictHostKeyChecking=no -i key \
+            backend/docker-compose.run.yml \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/opc/TitanicProd/docker-compose.run.yml
+          rm key

@@ -13,6 +13,7 @@ import shutil
 from firebase_admin import credentials
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 import sentry_sdk
+from sentry_sdk.integrations.rq import RqIntegration
 
 # This configures logging for any process that imports this module.
 # When imported from app.py, this runs FIRST (before app.py's basicConfig),
@@ -41,6 +42,7 @@ if _sentry_dsn:
     sentry_sdk.init(
         dsn=_sentry_dsn,
         environment=os.environ.get("SENTRY_ENVIRONMENT"),
+        integrations=[RqIntegration()],
         send_default_pii=True,
         traces_sample_rate=_sentry_traces_sample_rate(),
     )

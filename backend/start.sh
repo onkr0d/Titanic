@@ -8,7 +8,7 @@ cleanup() {
     wait "$redis_pid"
 }
 
-trap cleanup TERM INT EXIT
+trap cleanup TERM INT
 
 redis-server redis.conf &
 redis_pid=$!

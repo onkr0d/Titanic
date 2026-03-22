@@ -489,10 +489,15 @@ def upload_video_to_umbrel(input_file=None):
     job = rq.get_current_job()
     
     # Try to get file from dependency job first, otherwise use the input parameter
-    if job.dependency:
-        compressed_file = job.dependency.return_value(True)  # Get the result from the ffmpeg job
-        logger.debug(f"Got file from dependency job: {compressed_file}")
-    elif input_file:
+    compressed_file = None
+    try:
+        if job.dependency:
+            compressed_file = job.dependency.return_value(True)  # Get the result from the ffmpeg job
+            logger.debug(f"Got file from dependency job: {compressed_file}")
+    except Exception:
+        logger.warning("Dependency job no longer exists in Redis, falling back to input_file")
+
+    if not compressed_file and input_file:
         compressed_file = input_file
         logger.debug(f"Using input file directly: {compressed_file}")
     else:

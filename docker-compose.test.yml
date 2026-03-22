@@ -5,6 +5,7 @@
 
 services:
   umbrel:
+    image: titanic-umbrel:latest
     build:
       context: ./titanic
       dockerfile: Dockerfile
@@ -32,6 +33,7 @@ services:
       start_period: 10s
 
   flask:
+    image: titanic-flask:latest
     build:
       context: ./backend
       dockerfile: Dockerfile

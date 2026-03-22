@@ -7,7 +7,7 @@ cleanup() {
     wait "$redis_pid"
 }
 
-trap cleanup TERM INT
+trap cleanup TERM INT EXIT
 
 redis-server redis.conf &
 redis_pid=$!
@@ -21,4 +21,5 @@ umbrel_pid=$!
 python app.py &
 app_pid=$!
 
-wait
+wait "$app_pid"
+cleanup

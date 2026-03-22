@@ -72,8 +72,12 @@ jobs:
 
       - name: Copy compose file to VPS
         run: |
-          echo "${{ secrets.VPS_SSH_KEY }}" > key && chmod 600 key
-          scp -o StrictHostKeyChecking=no -i key \
+          key_file="$(mktemp)"
+          trap 'rm -f "$key_file"' EXIT
+          printf '%s' "${{ secrets.VPS_SSH_KEY }}" > "$key_file"
+          chmod 600 "$key_file"
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+          scp -i "$key_file" \
             backend/docker-compose.run.yml \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/opc/TitanicProd/docker-compose.run.yml
-          rm key

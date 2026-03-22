@@ -13,6 +13,7 @@ import shutil
 from firebase_admin import credentials
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 import sentry_sdk
+from sentry_sdk.integrations.rq import RqIntegration
 
 # This configures logging for any process that imports this module.
 # When imported from app.py, this runs FIRST (before app.py's basicConfig),
@@ -41,6 +42,7 @@ if _sentry_dsn:
     sentry_sdk.init(
         dsn=_sentry_dsn,
         environment=os.environ.get("SENTRY_ENVIRONMENT"),
+        integrations=[RqIntegration()],
         send_default_pii=True,
         traces_sample_rate=_sentry_traces_sample_rate(),
     )
@@ -331,6 +333,7 @@ def compress_video(input_file: str) -> str:
                 os.remove(input_file)
         except FileNotFoundError:
             pass
+        logger.info(f"Video processing complete: {filename}")
         return output_file
 
     try:
@@ -371,6 +374,7 @@ def compress_video(input_file: str) -> str:
         logger.debug("FFmpeg (HEVC transcode): %s", " ".join(cmd))
         subprocess.run(cmd, capture_output=True, text=True, check=True)
         logger.debug(f"Video compression completed: {output_file}")
+        logger.info(f"Video processing complete: {filename}")
 
     except subprocess.CalledProcessError as e:
         logger.error("Video compression failed: %s", e)
@@ -487,10 +491,15 @@ def upload_video_to_umbrel(input_file=None):
     job = rq.get_current_job()
     
     # Try to get file from dependency job first, otherwise use the input parameter
-    if job.dependency:
-        compressed_file = job.dependency.return_value(True)  # Get the result from the ffmpeg job
-        logger.debug(f"Got file from dependency job: {compressed_file}")
-    elif input_file:
+    compressed_file = None
+    try:
+        if job.dependency:
+            compressed_file = job.dependency.return_value(True)  # Get the result from the ffmpeg job
+            logger.debug(f"Got file from dependency job: {compressed_file}")
+    except Exception:
+        logger.warning("Dependency job no longer exists in Redis, falling back to input_file")
+
+    if not compressed_file and input_file:
         compressed_file = input_file
         logger.debug(f"Using input file directly: {compressed_file}")
     else:
@@ -577,6 +586,7 @@ def upload_video_to_umbrel(input_file=None):
         logger.debug(f"Umbrel upload response: {response_data}")
 
         logger.debug(f"Successfully uploaded video to Umbrel: {compressed_file}")
+        logger.info(f"Video uploaded to Umbrel: {os.path.basename(compressed_file)}")
     finally:
         if file_handle is not None:
             file_handle.close()

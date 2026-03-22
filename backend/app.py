@@ -285,7 +285,7 @@ async def upload_video():
             logger.debug("No folder specified for upload")
 
         if should_compress:
-            ffmpeg_job = ffmpeg_queue.enqueue(compress_video, args=[filepath])
+            ffmpeg_job = ffmpeg_queue.enqueue(compress_video, args=[filepath], result_ttl=86400)
             # Store user context instead of raw tokens to avoid expiration issues
             umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, depends_on=ffmpeg_job, meta=job_meta)
         else:

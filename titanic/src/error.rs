@@ -39,6 +39,11 @@ impl IntoResponse for AppError {
             self.to_string()
         );
 
+        // Report server errors to Sentry
+        if status.is_server_error() {
+            sentry::capture_message(&self.to_string(), sentry::Level::Error);
+        }
+
         let body = Json(json!({
             "error": error_message
         }));

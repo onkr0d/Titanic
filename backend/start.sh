@@ -1,5 +1,25 @@
 #!/bin/sh
+
+cleanup() {
+    kill -TERM "$ffmpeg_pid" "$umbrel_pid" "$app_pid" 2>/dev/null
+    wait "$ffmpeg_pid" "$umbrel_pid"
+    wait "$app_pid"
+    kill -TERM "$redis_pid" 2>/dev/null
+    wait "$redis_pid"
+}
+
+trap cleanup TERM INT
+
 redis-server redis.conf &
+redis_pid=$!
+
 rq worker ffmpeg &
+ffmpeg_pid=$!
+
 rq worker umbrel &
-python app.py
+umbrel_pid=$!
+
+python app.py &
+app_pid=$!
+
+wait "$app_pid"

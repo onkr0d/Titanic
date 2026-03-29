@@ -9,10 +9,6 @@ services:
     build:
       context: ./titanic
       dockerfile: Dockerfile
-      cache_from:
-        - type=gha,scope=e2e-umbrel
-      cache_to:
-        - type=gha,mode=max,scope=e2e-umbrel
     container_name: titanic_test_umbrel
     environment:
       - FIREBASE_PROJECT_ID=test-project
@@ -37,10 +33,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      cache_from:
-        - type=gha,scope=e2e-flask
-      cache_to:
-        - type=gha,mode=max,scope=e2e-flask
     container_name: titanic_test_flask
     command: >
       sh -c "redis-server &

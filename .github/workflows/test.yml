@@ -55,7 +55,13 @@ jobs:
           driver-opts: network=host
 
       - name: Build images with cache
-        run: docker buildx bake -f docker-compose.test.yml --load
+        run: |
+          docker buildx bake -f docker-compose.test.yml \
+            --set 'umbrel.cache-from=type=gha,scope=e2e-umbrel' \
+            --set 'umbrel.cache-to=type=gha,mode=max,scope=e2e-umbrel' \
+            --set 'flask.cache-from=type=gha,scope=e2e-flask' \
+            --set 'flask.cache-to=type=gha,mode=max,scope=e2e-flask' \
+            --load
 
       - name: Start services
         run: docker compose -f docker-compose.test.yml up -d --no-build

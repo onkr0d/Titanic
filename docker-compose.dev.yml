@@ -10,8 +10,8 @@ services:
     container_name: titanic_flask_dev
     command: >
       sh -c "redis-server &
-             rq worker ffmpeg &
-             rq worker umbrel &
+             python worker.py ffmpeg &
+             python worker.py umbrel &
              python app.py"
     ports:
       - "6969:5000"

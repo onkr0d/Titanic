@@ -17,6 +17,10 @@ if dsn:
     try:
         traces_sample_rate = float(sample_rate) if sample_rate else 1.0
     except ValueError:
+        logging.warning(
+            "Invalid SENTRY_TRACES_SAMPLE_RATE value %r; falling back to 1.0",
+            sample_rate,
+        )
         traces_sample_rate = 1.0
     sentry_sdk.init(
         dsn=dsn,

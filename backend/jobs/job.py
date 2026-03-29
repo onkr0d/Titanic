@@ -13,9 +13,11 @@ import shutil
 from firebase_admin import credentials
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 
-# Logging is configured by whichever process imports this module:
-# - standalone workers: worker.py sets up basicConfig before importing job functions
-# - app.py: its own basicConfig runs after this import (no-op since worker.py already set it)
+# Logging configuration note:
+# - When imported by app.py, this module's basicConfig runs first; app.py's later
+#   basicConfig call is therefore a no-op.
+# - When used by standalone workers, worker.py configures logging (via basicConfig)
+#   before RQ imports this module, so this module's basicConfig is usually a no-op.
 _is_dev = os.environ.get('IS_DEV', 'false').lower() == 'true'
 logging.basicConfig(
     level=logging.DEBUG if _is_dev else logging.INFO,

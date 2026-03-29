@@ -13,10 +13,10 @@ trap cleanup TERM INT
 redis-server redis.conf &
 redis_pid=$!
 
-rq worker ffmpeg &
+python worker.py ffmpeg &
 ffmpeg_pid=$!
 
-rq worker umbrel &
+python worker.py umbrel &
 umbrel_pid=$!
 
 python app.py &

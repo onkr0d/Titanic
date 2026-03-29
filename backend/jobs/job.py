@@ -12,13 +12,12 @@ import firebase_admin
 import shutil
 from firebase_admin import credentials
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
-import sentry_sdk
-from sentry_sdk.integrations.rq import RqIntegration
 
-# This configures logging for any process that imports this module.
-# When imported from app.py, this runs FIRST (before app.py's basicConfig),
-# so the level set here wins — basicConfig is a no-op if handlers already exist.
-# This also ensures that standalone RQ workers have logging configured.
+# Logging configuration note:
+# - When imported by app.py, this module's basicConfig runs first; app.py's later
+#   basicConfig call is therefore a no-op.
+# - When used by standalone workers, worker.py configures logging (via basicConfig)
+#   before RQ imports this module, so this module's basicConfig is usually a no-op.
 _is_dev = os.environ.get('IS_DEV', 'false').lower() == 'true'
 logging.basicConfig(
     level=logging.DEBUG if _is_dev else logging.INFO,
@@ -26,26 +25,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
-def _sentry_traces_sample_rate() -> float:
-    sample_rate = os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "").strip()
-    if not sample_rate:
-        return 1.0
-    try:
-        return float(sample_rate)
-    except ValueError:
-        logger.warning("Invalid SENTRY_TRACES_SAMPLE_RATE=%s; defaulting to 1.0", sample_rate)
-        return 1.0
-
-_sentry_dsn = os.environ.get("SENTRY_RQ_DSN", "").strip()
-if _sentry_dsn:
-    sentry_sdk.init(
-        dsn=_sentry_dsn,
-        environment=os.environ.get("SENTRY_ENVIRONMENT"),
-        integrations=[RqIntegration()],
-        send_default_pii=True,
-        traces_sample_rate=_sentry_traces_sample_rate(),
-    )
 
 def initialize_firebase():
     """

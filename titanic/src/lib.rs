@@ -13,7 +13,7 @@ use axum::{
 };
 use axum::extract::multipart::MultipartError;
 use axum::http::{HeaderName, HeaderValue, Method};
-use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer};
+use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -91,6 +91,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .route("/", get(settings::settings_page))
         .route("/settings", get(settings::settings_page))
         .route("/api/settings", get(settings::get_settings).put(settings::put_settings))
+        .layer(TraceLayer::new_for_http())
         .layer(cors)
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(CONTENT_LENGTH_LIMIT))

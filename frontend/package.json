@@ -18,7 +18,7 @@
     "@rpldy/upload-preview": "^1.13.0",
     "@rpldy/uploady": "^1.13.0",
     "@sentry/react": "^10.43.0",
-    "@sentry/vite-plugin": "^4.6.1",
+    "@sentry/vite-plugin": "^5.1.1",
     "@tailwindcss/vite": "^4.2.1",
     "axios": "^1.13.5",
     "caniuse-lite": "^1.0.30001779",

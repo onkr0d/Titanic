@@ -1,0 +1,41 @@
+manifestVersion: 1
+id: titanic-trimmer
+name: Titanic Trimmer
+tagline: Trim and edit your video clips
+icon: http://ivans-mac:3000/titanic-icon-4.png
+category: Media
+version: "1.0.0"
+port: 3030
+description: >-
+  Titanic Trimmer is a lightweight video editing tool for trimming clips
+  stored on your Umbrel. Browse your video library, set trim points visually,
+  and save trimmed versions — all from a web UI. Uses FFmpeg stream copy for
+  instant, lossless trimming.
+developer: Ivan
+website: https://github.com/onkr0d/Titanic
+submitter: Ivan
+submission: https://github.com/onkr0d/Titanic/
+repo: https://github.com/onkr0d/Titanic
+support: https://github.com/onkr0d/Titanic/issues
+gallery: []
+releaseNotes: >-
+  Initial release.
+dependencies: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+
+# Permissions for accessing Plex media directory
+permissions:
+  - STORAGE_DOWNLOADS
+  - STORAGE_MEDIA
+
+# Configure Umbrel's reverse proxy
+app_proxy:
+  default:
+    container: app
+    port: 3030
+    path: /
+    initialCheck:
+      path: /health
+      timeout: 60

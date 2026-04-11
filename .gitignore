@@ -29,3 +29,4 @@ node_modules/
 /backend/videos
 /titanic/Clips
 /frontend/.firebase
+.claude/

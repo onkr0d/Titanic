@@ -46,14 +46,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract version
+        id: version
+        run: echo "tag=v${GITHUB_REF_NAME#trimmer-v}" >> $GITHUB_OUTPUT
+
       - name: Build and Push (${{ matrix.suffix }})
         uses: docker/build-push-action@v6
         with:
           context: ./trimmer
           push: true
           platforms: ${{ matrix.platform }}
-          # Tag: trimmer:trimmer-v1.0.0-amd64
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/trimmer:${{ github.ref_name }}${{ matrix.suffix }}
+          # Tag: trimmer:v1.0.0-amd64
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/trimmer:${{ steps.version.outputs.tag }}${{ matrix.suffix }}
           # Read from the DEV cache to speed up release builds!
           cache-from: type=gha,scope=trimmer-${{ matrix.suffix }}
           provenance: false
@@ -77,18 +81,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract version
+        id: version
+        run: echo "tag=v${GITHUB_REF_NAME#trimmer-v}" >> $GITHUB_OUTPUT
+
       # 1. Stitch the manifest
       - name: Create Multi-Arch Manifest
         id: create_manifest
         run: |
-          TAG_NAME=${{ github.ref_name }}
-          FULL_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/trimmer:${TAG_NAME}"
-          
+          IMAGE_TAG=${{ steps.version.outputs.tag }}
+          FULL_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/trimmer:${IMAGE_TAG}"
+
           # Merge the -amd64 and -arm64 images into one tag
           docker buildx imagetools create -t $FULL_IMAGE \
             ${FULL_IMAGE}-amd64 \
             ${FULL_IMAGE}-arm64
-            
+
           # Inspect to get the final SHA256 Digest of the Manifest List
           DIGEST=$(docker buildx imagetools inspect $FULL_IMAGE | grep "^Digest:" | awk '{print $2}')
           echo "digest=$DIGEST" >> $GITHUB_OUTPUT
@@ -97,7 +105,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          name: "Trimmer ${{ github.ref_name }}"
+          name: "Trimmer ${{ steps.version.outputs.tag }}"
           generate_release_notes: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -105,8 +113,7 @@ jobs:
       - name: Update Umbrel App Store
         env:
           GH_TOKEN: ${{ secrets.UMBREL_APPS_PAT }}
-          TAG_NAME: ${{ github.ref_name }}
-          # Use the digest we captured from the imagetools inspect step
+          IMAGE_TAG: ${{ steps.version.outputs.tag }}
           DIGEST: ${{ steps.create_manifest.outputs.digest }}
         run: |
           git config --global user.email "action@github.com"
@@ -115,25 +122,25 @@ jobs:
           git clone https://x-access-token:${GH_TOKEN}@github.com/onkr0d/umbrel-apps.git umbrel_apps_temp
           cd umbrel_apps_temp/sparkles-trimmer
 
-          # Strip "trimmer-v" prefix to get clean version
-          CLEAN_VER="${TAG_NAME#trimmer-v}"
-          
+          # Strip "v" prefix to get clean version number
+          CLEAN_VER="${IMAGE_TAG#v}"
+
           # Construct the exact reference: image:tag@sha256:....
-          NEW_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/trimmer:${TAG_NAME}@${DIGEST}"
-          
+          NEW_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/trimmer:${IMAGE_TAG}@${DIGEST}"
+
           # Update Manifests
           sed -i "s|image: .*|image: $NEW_IMAGE|g" docker-compose.yml
           sed -i 's/version: \".*\"/version: \"'"$CLEAN_VER"'\"/' umbrel-app.yml
 
-          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${TAG_NAME}"
-          NOTES="Update to ${TAG_NAME}. See full changelog: ${RELEASE_URL}"
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          NOTES="Update to ${IMAGE_TAG}. See full changelog: ${RELEASE_URL}"
           sed -i "s|releaseNotes: .*|releaseNotes: \"$NOTES\"|g" umbrel-app.yml
 
           git add docker-compose.yml umbrel-app.yml
           if git diff --staged --quiet; then
             echo "No changes detected."
           else
-            git commit -m "Release Trimmer ${TAG_NAME}"
+            git commit -m "Release Trimmer ${IMAGE_TAG}"
             git push origin master
           fi
 
@@ -143,5 +150,5 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           package: titanic/trimmer
           # Delete the platform-specific tags for this release
-          delete-tags: ${{ github.ref_name }}-amd64,${{ github.ref_name }}-arm64
+          delete-tags: ${{ steps.version.outputs.tag }}-amd64,${{ steps.version.outputs.tag }}-arm64
           dry-run: false

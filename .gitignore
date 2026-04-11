@@ -18,7 +18,6 @@ __pycache__/
 
 # Rust build artifacts
 /titanic/target/
-Cargo.lock
 
 # Node modules
 node_modules/
@@ -29,3 +28,4 @@ node_modules/
 /backend/videos
 /titanic/Clips
 /frontend/.firebase
+.claude/

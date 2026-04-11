@@ -69,6 +69,24 @@ services:
       - titanic_dev_network
     # Healthcheck is disabled for cargo-watch, as the server might restart frequently.
 
+  # Trimmer service
+  trimmer:
+    build:
+      context: ./trimmer
+      dockerfile: Dockerfile
+    container_name: titanic_trimmer_dev
+    ports:
+      - "3030:3030"
+    volumes:
+      - ./trimmer/static:/app/static
+      - ./titanic/Clips:/downloads/Clips
+    environment:
+      - RUST_LOG=debug
+      - MEDIA_PATH=/downloads
+      - DATA_DIR=/data
+    networks:
+      - titanic_dev_network
+
 networks:
   titanic_dev_network:
     driver: bridge

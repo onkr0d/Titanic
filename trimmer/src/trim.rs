@@ -243,9 +243,9 @@ pub async fn generate_thumbnail(
     // Chrome's compositor can't handle wide-gamut (P3/BT.2020/HLG) in AVIF thumbnails,
     // producing rendering artifacts that bleed on scroll. We must normalize to BT.709/sRGB.
     //
-    // Strategy: try HDR tonemap first (for HLG/PQ content), fall back to colorspace conversion
-    // (for P3/wide-gamut SDR), then to simple extraction as last resort.
-    // All paths produce lossless AV1 in BT.709 color space.
+    // Strategy: try HDR tonemap first (for HLG/PQ content), then fall back to colorspace
+    // conversion (for P3/wide-gamut SDR).
+    // Both paths produce lossless AV1 in BT.709 color space.
 
     let avif_args = [
         "-c:v", "libsvtav1",

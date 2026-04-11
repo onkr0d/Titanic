@@ -8,7 +8,8 @@ use axum::{
     response::{Html, IntoResponse, Json, Response},
     routing::{get, post},
 };
-use tower_http::services::ServeDir;
+use tower::ServiceExt;
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
 use serde::{Deserialize, Serialize};
@@ -229,6 +230,7 @@ fn is_video_file(path: &Path) -> bool {
 async fn serve_video(
     State(state): State<Arc<AppState>>,
     Query(params): Query<PathQuery>,
+    request: axum::extract::Request,
 ) -> Result<Response, AppError> {
     let video_path = trim::ensure_path_within(&state.media_path, Path::new(&params.path))?;
 
@@ -236,31 +238,9 @@ async fn serve_video(
         return Err(AppError::NotFound("Video not found".into()));
     }
 
-    // Determine content type from extension
-    let content_type = match video_path.extension().and_then(|e| e.to_str()) {
-        Some("mp4") | Some("m4v") => "video/mp4",
-        Some("webm") => "video/webm",
-        Some("mkv") => "video/x-matroska",
-        Some("avi") => "video/x-msvideo",
-        Some("mov") => "video/quicktime",
-        Some("wmv") => "video/x-ms-wmv",
-        Some("flv") => "video/x-flv",
-        Some("ts") => "video/mp2t",
-        _ => "application/octet-stream",
-    };
-
-    let file_data = tokio::fs::read(&video_path)
+    Ok(ServeFile::new(&video_path)
+        .oneshot(request)
         .await
-        .map_err(|e| AppError::InternalError(format!("Failed to read video: {e}")))?;
-
-    Ok((
-        StatusCode::OK,
-        [
-            ("Content-Type", content_type),
-            ("Accept-Ranges", "bytes"),
-        ],
-        file_data,
-    )
         .into_response())
 }
 

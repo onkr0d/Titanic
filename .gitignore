@@ -18,7 +18,6 @@ __pycache__/
 
 # Rust build artifacts
 /titanic/target/
-Cargo.lock
 
 # Node modules
 node_modules/

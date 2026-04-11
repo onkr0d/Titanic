@@ -65,12 +65,15 @@
             videos = data.videos || [];
             renderLibrary();
         } catch (err) {
-            videoGrid.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">📭</div>
-                    <p>Failed to load videos</p>
-                    <p style="font-size:0.8rem;margin-top:8px">${err.message}</p>
-                </div>`;
+            videoGrid.innerHTML = '';
+            const emptyState = document.createElement('div');
+            emptyState.className = 'empty-state';
+            emptyState.innerHTML = '<div class="empty-state-icon">📭</div><p>Failed to load videos</p>';
+            const detail = document.createElement('p');
+            detail.style.cssText = 'font-size:0.8rem;margin-top:8px';
+            detail.textContent = err.message || 'Unknown error';
+            emptyState.appendChild(detail);
+            videoGrid.appendChild(emptyState);
         }
     }
 

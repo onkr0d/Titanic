@@ -111,6 +111,8 @@ pub struct VideoEntry {
     folder: String,
     size: u64,
     modified: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    duration: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -121,6 +123,12 @@ pub struct VideosResponse {
 #[derive(Debug, Deserialize)]
 pub struct PathQuery {
     path: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VideosQuery {
+    #[serde(default)]
+    sort: Option<String>,
 }
 
 pub fn build_router(state: Arc<AppState>) -> Router<()> {
@@ -150,6 +158,7 @@ async fn index_page() -> Html<&'static str> {
 
 async fn list_videos(
     State(state): State<Arc<AppState>>,
+    Query(params): Query<VideosQuery>,
 ) -> Result<Json<VideosResponse>, AppError> {
     let clips_dir = state.media_path.join("Clips");
     if !clips_dir.exists() {
@@ -159,8 +168,31 @@ async fn list_videos(
     let mut videos = Vec::new();
     collect_videos(&clips_dir, &state.media_path, &mut videos)?;
 
-    // Sort by modification time (newest first)
-    videos.sort_by(|a, b| b.modified.cmp(&a.modified));
+    let sort_by_duration = params.sort.as_deref() == Some("duration");
+
+    if sort_by_duration {
+        // Fetch durations for all videos in parallel
+        let duration_futures: Vec<_> = videos
+            .iter()
+            .map(|v| {
+                let path = state.media_path.join(&v.path);
+                async move { trim::get_video_duration(&path).await.ok() }
+            })
+            .collect();
+        let durations = futures::future::join_all(duration_futures).await;
+        for (video, dur) in videos.iter_mut().zip(durations) {
+            video.duration = dur;
+        }
+        videos.sort_by(|a, b| {
+            b.duration
+                .unwrap_or(0.0)
+                .partial_cmp(&a.duration.unwrap_or(0.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+    } else {
+        // Default: sort by modification time (newest first)
+        videos.sort_by(|a, b| b.modified.cmp(&a.modified));
+    }
 
     Ok(Json(VideosResponse { videos }))
 }
@@ -214,6 +246,7 @@ fn collect_videos(
                 folder,
                 size: metadata.len(),
                 modified,
+                duration: None,
             });
         }
     }

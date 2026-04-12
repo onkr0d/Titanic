@@ -18,7 +18,8 @@
     const editorView = $('#editorView');
     const videoGrid = $('#videoGrid');
     const searchInput = $('#searchInput');
-    const folderFilter = $('#folderFilter');
+    const folderDropdown = $('#folderDropdown');
+    const sortDropdown = $('#sortDropdown');
     const backBtn = $('#backToLibrary');
     const videoPlayer = $('#videoPlayer');
     const videoTitle = $('#videoTitle');
@@ -47,6 +48,51 @@
     const progressBuffered = $('#progressBuffered');
     const progressHandle = $('#progressHandle');
     const timeDisplay = $('#timeDisplay');
+    const progressTrimStart = $('#progressTrimStart');
+    const progressTrimEnd = $('#progressTrimEnd');
+    const progressTrimRegion = $('#progressTrimRegion');
+
+    // ---- Custom dropdown helpers ----
+    function getDropdownValue(dropdown) {
+        const selected = dropdown.querySelector('.custom-select-option.selected');
+        return selected ? selected.dataset.value : '';
+    }
+
+    function setDropdownValue(dropdown, value) {
+        dropdown.querySelectorAll('.custom-select-option').forEach(opt => opt.classList.remove('selected'));
+        const match = dropdown.querySelector(`.custom-select-option[data-value="${value}"]`);
+        if (match) {
+            match.classList.add('selected');
+            dropdown.querySelector('.custom-select-value').textContent = match.textContent;
+        }
+    }
+
+    function initDropdown(dropdown, onChange) {
+        const trigger = dropdown.querySelector('.custom-select-trigger');
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Close other dropdowns
+            document.querySelectorAll('.custom-select.open').forEach(d => {
+                if (d !== dropdown) d.classList.remove('open');
+            });
+            dropdown.classList.toggle('open');
+        });
+
+        dropdown.querySelector('.custom-select-menu').addEventListener('click', (e) => {
+            const option = e.target.closest('.custom-select-option');
+            if (!option) return;
+            dropdown.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+            option.classList.add('selected');
+            dropdown.querySelector('.custom-select-value').textContent = option.textContent;
+            dropdown.classList.remove('open');
+            if (onChange) onChange(option.dataset.value);
+        });
+    }
+
+    // Close dropdowns on outside click
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.custom-select.open').forEach(d => d.classList.remove('open'));
+    });
 
     // ---- Init ----
     init();
@@ -59,7 +105,9 @@
     // ---- API ----
     async function loadVideos() {
         try {
-            const res = await fetch('/api/videos');
+            const sort = getDropdownValue(sortDropdown);
+            const qs = sort && sort !== 'modified' ? `?sort=${sort}` : '';
+            const res = await fetch('/api/videos' + qs);
             if (!res.ok) throw new Error('Failed to load videos');
             const data = await res.json();
             videos = data.videos || [];
@@ -98,7 +146,7 @@
     // ---- Rendering ----
     function renderLibrary() {
         const search = searchInput.value.toLowerCase();
-        const folder = folderFilter.value;
+        const folder = getDropdownValue(folderDropdown);
 
         const filtered = videos.filter((v) => {
             if (search && !v.name.toLowerCase().includes(search)) return false;
@@ -108,14 +156,20 @@
 
         // Populate folder filter
         const folders = [...new Set(videos.map((v) => v.folder).filter(Boolean))].sort();
-        const currentFolder = folderFilter.value;
-        folderFilter.innerHTML = '<option value="">All Folders</option>';
+        const currentFolder = getDropdownValue(folderDropdown);
+        const menu = folderDropdown.querySelector('.custom-select-menu');
+        menu.innerHTML = '';
+        const allOpt = document.createElement('li');
+        allOpt.className = 'custom-select-option' + (currentFolder === '' ? ' selected' : '');
+        allOpt.dataset.value = '';
+        allOpt.textContent = 'All Folders';
+        menu.appendChild(allOpt);
         folders.forEach((f) => {
-            const opt = document.createElement('option');
-            opt.value = f;
+            const opt = document.createElement('li');
+            opt.className = 'custom-select-option' + (f === currentFolder ? ' selected' : '');
+            opt.dataset.value = f;
             opt.textContent = f;
-            if (f === currentFolder) opt.selected = true;
-            folderFilter.appendChild(opt);
+            menu.appendChild(opt);
         });
 
         if (filtered.length === 0) {
@@ -214,6 +268,20 @@
         endSlider.value = endPct;
         trimRegion.style.left = startPct + '%';
         trimRegion.style.right = (100 - endPct) + '%';
+        updateProgressTrimMarkers(startPct, endPct);
+    }
+
+    function updateProgressTrimMarkers(startPct, endPct) {
+        // Show markers only when the trim range is not the full video
+        const isTrimmed = startPct > 0.05 || endPct < 99.95;
+        const display = isTrimmed ? 'block' : 'none';
+        progressTrimStart.style.display = display;
+        progressTrimEnd.style.display = display;
+        progressTrimRegion.style.display = display;
+        progressTrimStart.style.left = startPct + '%';
+        progressTrimEnd.style.left = endPct + '%';
+        progressTrimRegion.style.left = startPct + '%';
+        progressTrimRegion.style.width = (endPct - startPct) + '%';
     }
 
     function updateTimeInputs() {
@@ -237,6 +305,12 @@
 
         // Time display
         timeDisplay.textContent = `${formatTimeShort(videoPlayer.currentTime)} / ${formatTimeShort(videoDuration)}`;
+
+        // Pause at trim end point
+        if (trimEnd < videoDuration && videoPlayer.currentTime >= trimEnd && !videoPlayer.paused) {
+            videoPlayer.pause();
+            videoPlayer.currentTime = trimEnd;
+        }
     }
 
     function updateBuffered() {
@@ -293,7 +367,8 @@
     function bindEvents() {
         backBtn.addEventListener('click', closeEditor);
         searchInput.addEventListener('input', renderLibrary);
-        folderFilter.addEventListener('change', renderLibrary);
+        initDropdown(folderDropdown, () => renderLibrary());
+        initDropdown(sortDropdown, () => loadVideos());
 
         // ---- Custom video controls ----
         // Play/pause button

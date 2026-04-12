@@ -30,9 +30,25 @@
                 <h2>Video Library</h2>
                 <div class="library-controls">
                     <input type="text" id="searchInput" placeholder="Search videos..." class="search-input">
-                    <select id="folderFilter" class="folder-select">
-                        <option value="">All Folders</option>
-                    </select>
+                    <div class="custom-select" id="folderDropdown">
+                        <button class="custom-select-trigger" type="button">
+                            <span class="custom-select-value">All Folders</span>
+                            <svg class="custom-select-chevron" viewBox="0 0 24 24" width="16" height="16"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                        <ul class="custom-select-menu">
+                            <li class="custom-select-option selected" data-value="">All Folders</li>
+                        </ul>
+                    </div>
+                    <div class="custom-select" id="sortDropdown">
+                        <button class="custom-select-trigger" type="button">
+                            <span class="custom-select-value">Newest First</span>
+                            <svg class="custom-select-chevron" viewBox="0 0 24 24" width="16" height="16"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                        <ul class="custom-select-menu">
+                            <li class="custom-select-option selected" data-value="modified">Newest First</li>
+                            <li class="custom-select-option" data-value="duration">Longest First</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
             <div id="videoGrid" class="video-grid">
@@ -56,7 +72,10 @@
                             <div class="controls-progress">
                                 <div class="progress-bar" id="progressBar">
                                     <div class="progress-buffered" id="progressBuffered"></div>
+                                    <div class="progress-trim-region" id="progressTrimRegion"></div>
                                     <div class="progress-played" id="progressPlayed"></div>
+                                    <div class="progress-trim-marker progress-trim-start" id="progressTrimStart"></div>
+                                    <div class="progress-trim-marker progress-trim-end" id="progressTrimEnd"></div>
                                     <div class="progress-handle" id="progressHandle"></div>
                                 </div>
                             </div>

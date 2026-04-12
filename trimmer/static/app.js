@@ -106,7 +106,11 @@
     async function loadVideos() {
         try {
             const sort = getDropdownValue(sortDropdown);
-            const qs = sort && sort !== 'modified' ? `?sort=${sort}` : '';
+            const folder = getDropdownValue(folderDropdown);
+            const params = new URLSearchParams();
+            if (sort && sort !== 'modified') params.set('sort', sort);
+            if (folder) params.set('folder', folder);
+            const qs = params.toString() ? '?' + params.toString() : '';
             const res = await fetch('/api/videos' + qs);
             if (!res.ok) throw new Error('Failed to load videos');
             const data = await res.json();
@@ -367,7 +371,7 @@
     function bindEvents() {
         backBtn.addEventListener('click', closeEditor);
         searchInput.addEventListener('input', renderLibrary);
-        initDropdown(folderDropdown, () => renderLibrary());
+        initDropdown(folderDropdown, () => loadVideos());
         initDropdown(sortDropdown, () => loadVideos());
 
         // ---- Custom video controls ----

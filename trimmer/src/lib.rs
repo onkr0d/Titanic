@@ -105,7 +105,7 @@ pub async fn pre_cache_durations(state: Arc<AppState>) {
             let state = state.clone();
             let sem = semaphore.clone();
             async move {
-                let metadata = match std::fs::metadata(&video_path) {
+                let metadata = match tokio::fs::metadata(&video_path).await {
                     Ok(m) => m,
                     Err(_) => return None,
                 };

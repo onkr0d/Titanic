@@ -4,12 +4,13 @@ pub mod trim;
 use axum::{
     Router,
     extract::{Query, State},
-    http::StatusCode,
+    http::{HeaderValue, StatusCode, header},
     response::{Html, IntoResponse, Json, Response},
     routing::{get, post},
 };
 use tower::ServiceExt;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 
 use serde::{Deserialize, Serialize};
@@ -132,6 +133,16 @@ pub struct VideosQuery {
 }
 
 pub fn build_router(state: Arc<AppState>) -> Router<()> {
+    // Serve static assets with short cache + must-revalidate so iOS standalone
+    // (Add to Home Screen) mode picks up changes instead of serving stale files.
+    let static_service = ServeDir::new("static");
+    let static_router = Router::new()
+        .nest_service("/", static_service)
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-cache, must-revalidate"),
+        ));
+
     Router::new()
         .route("/health", get(health_check))
         .route("/api/videos", get(list_videos))
@@ -139,7 +150,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .route("/api/thumbnail", get(serve_thumbnail))
         .route("/api/trim", post(handle_trim))
         .route("/api/duration", get(get_duration))
-        .nest_service("/static", ServeDir::new("static"))
+        .nest_service("/static", static_router)
         .route("/", get(index_page))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -152,8 +163,22 @@ async fn health_check() -> Json<HealthResponse> {
     })
 }
 
-async fn index_page() -> Html<&'static str> {
-    Html(include_str!("../static/index.html"))
+async fn index_page() -> Response {
+    match tokio::fs::read_to_string("static/index.html").await {
+        Ok(html) => (
+            StatusCode::OK,
+            [
+                (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+                (header::CACHE_CONTROL, "no-cache, must-revalidate"),
+            ],
+            html,
+        )
+            .into_response(),
+        Err(_) => {
+            // Fallback to compiled-in copy if the file can't be read at runtime
+            Html(include_str!("../static/index.html")).into_response()
+        }
+    }
 }
 
 async fn list_videos(

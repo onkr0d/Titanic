@@ -4,18 +4,20 @@ pub mod trim;
 use axum::{
     Router,
     extract::{Query, State},
-    http::StatusCode,
-    response::{Html, IntoResponse, Json, Response},
+    http::{HeaderValue, StatusCode, header},
+    response::{IntoResponse, Json, Response},
     routing::{get, post},
 };
-use tower::ServiceExt;
+use tower::{Layer, ServiceExt};
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::Semaphore;
+use tokio::sync::{RwLock, Semaphore};
 use tracing::{info, warn};
 
 use error::AppError;
@@ -76,6 +78,85 @@ pub async fn pre_generate_thumbnails(state: Arc<AppState>) {
     info!("Thumbnail pre-generation complete");
 }
 
+/// Background task: probe and cache video durations so sort-by-duration is instant.
+pub async fn pre_cache_durations(state: Arc<AppState>) {
+    let clips_dir = state.media_path.join("Clips");
+    if !clips_dir.exists() {
+        return;
+    }
+
+    let mut video_paths = Vec::new();
+    if let Err(e) = collect_video_paths(&clips_dir, &mut video_paths) {
+        warn!("Failed to scan for videos: {e}");
+        return;
+    }
+
+    if video_paths.is_empty() {
+        return;
+    }
+
+    info!("Caching durations for {} videos", video_paths.len());
+
+    let semaphore = Arc::new(Semaphore::new(4));
+
+    let futures: Vec<_> = video_paths
+        .into_iter()
+        .map(|video_path| {
+            let state = state.clone();
+            let sem = semaphore.clone();
+            async move {
+                let metadata = match tokio::fs::metadata(&video_path).await {
+                    Ok(m) => m,
+                    Err(_) => return None,
+                };
+                let mtime = metadata
+                    .modified()
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64;
+
+                let relative = video_path
+                    .strip_prefix(&state.media_path)
+                    .unwrap_or(&video_path)
+                    .to_string_lossy()
+                    .to_string();
+
+                // Check existing cache — skip if mtime hasn't changed
+                {
+                    let cache = state.duration_cache.read().await;
+                    if let Some(&(cached_mtime, dur)) = cache.get(&relative) {
+                        if cached_mtime == mtime {
+                            return Some((relative, (mtime, dur)));
+                        }
+                    }
+                }
+
+                let _permit = sem.acquire().await.unwrap();
+                match trim::get_video_duration(&video_path).await {
+                    Ok(dur) => Some((relative, (mtime, dur))),
+                    Err(e) => {
+                        warn!("Duration probe failed for {:?}: {e}", video_path);
+                        None
+                    }
+                }
+            }
+        })
+        .collect();
+
+    let results = futures::future::join_all(futures).await;
+    let mut new_cache = HashMap::new();
+    for result in results.into_iter().flatten() {
+        new_cache.insert(result.0, result.1);
+    }
+
+    *state.duration_cache.write().await = new_cache;
+    info!(
+        "Duration cache populated: {} entries",
+        state.duration_cache.read().await.len()
+    );
+}
+
 fn collect_video_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> Result<(), String> {
     let entries = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
     for entry in entries.flatten() {
@@ -96,6 +177,8 @@ const VALID_VIDEO_EXTENSIONS: &[&str] = &[
 pub struct AppState {
     pub media_path: PathBuf,
     pub data_dir: PathBuf,
+    /// In-memory cache: relative_path -> (mtime_secs, duration_secs)
+    pub duration_cache: RwLock<HashMap<String, (i64, f64)>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -129,9 +212,19 @@ pub struct PathQuery {
 pub struct VideosQuery {
     #[serde(default)]
     sort: Option<String>,
+    #[serde(default)]
+    folder: Option<String>,
 }
 
 pub fn build_router(state: Arc<AppState>) -> Router<()> {
+    // Serve static assets with no-cache + must-revalidate so iOS standalone
+    // (Add to Home Screen) mode revalidates and picks up changes instead of serving stale files.
+    let static_service = SetResponseHeaderLayer::overriding(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-cache, must-revalidate"),
+    )
+    .layer(ServeDir::new("static"));
+
     Router::new()
         .route("/health", get(health_check))
         .route("/api/videos", get(list_videos))
@@ -139,7 +232,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .route("/api/thumbnail", get(serve_thumbnail))
         .route("/api/trim", post(handle_trim))
         .route("/api/duration", get(get_duration))
-        .nest_service("/static", ServeDir::new("static"))
+        .nest_service("/static", static_service)
         .route("/", get(index_page))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -152,8 +245,24 @@ async fn health_check() -> Json<HealthResponse> {
     })
 }
 
-async fn index_page() -> Html<&'static str> {
-    Html(include_str!("../static/index.html"))
+async fn index_page() -> Response {
+    let html = match tokio::fs::read_to_string("static/index.html").await {
+        Ok(html) => html,
+        Err(_) => {
+            // Fallback to compiled-in copy if the file can't be read at runtime
+            include_str!("../static/index.html").to_string()
+        }
+    };
+
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-cache, must-revalidate"),
+        ],
+        html,
+    )
+        .into_response()
 }
 
 async fn list_videos(
@@ -168,20 +277,19 @@ async fn list_videos(
     let mut videos = Vec::new();
     collect_videos(&clips_dir, &state.media_path, &mut videos)?;
 
-    let sort_by_duration = params.sort.as_deref() == Some("duration");
+    // Server-side folder filtering
+    if let Some(ref folder) = params.folder {
+        if !folder.is_empty() {
+            videos.retain(|v| v.folder == *folder);
+        }
+    }
 
-    if sort_by_duration {
-        // Fetch durations for all videos in parallel
-        let duration_futures: Vec<_> = videos
-            .iter()
-            .map(|v| {
-                let path = state.media_path.join(&v.path);
-                async move { trim::get_video_duration(&path).await.ok() }
-            })
-            .collect();
-        let durations = futures::future::join_all(duration_futures).await;
-        for (video, dur) in videos.iter_mut().zip(durations) {
-            video.duration = dur;
+    if params.sort.as_deref() == Some("duration") {
+        let cache = state.duration_cache.read().await;
+        for video in &mut videos {
+            if let Some(&(_mtime, dur)) = cache.get(&video.path) {
+                video.duration = Some(dur);
+            }
         }
         videos.sort_by(|a, b| {
             b.duration
@@ -190,7 +298,6 @@ async fn list_videos(
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
     } else {
-        // Default: sort by modification time (newest first)
         videos.sort_by(|a, b| b.modified.cmp(&a.modified));
     }
 
@@ -317,6 +424,15 @@ async fn get_duration(
         return Err(AppError::NotFound("Video not found".into()));
     }
 
+    // Try cache first
+    {
+        let cache = state.duration_cache.read().await;
+        if let Some(&(_mtime, dur)) = cache.get(&params.path) {
+            return Ok(Json(DurationResponse { duration: dur }));
+        }
+    }
+
+    // Cache miss — fall back to ffprobe
     let duration = trim::get_video_duration(&video_path).await?;
     Ok(Json(DurationResponse { duration }))
 }
@@ -331,6 +447,14 @@ async fn handle_trim(
     );
 
     let result = trim::trim_video(&state.media_path, &req).await?;
+
+    // Invalidate cache for affected paths
+    {
+        let mut cache = state.duration_cache.write().await;
+        cache.remove(&req.path);
+        cache.remove(&result.output_path);
+    }
+
     Ok(Json(result))
 }
 

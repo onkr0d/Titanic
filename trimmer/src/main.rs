@@ -1,7 +1,9 @@
 use anyhow::Result;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::sync::RwLock;
 use tracing::info;
 
 use trimmer::AppState;
@@ -50,6 +52,7 @@ async fn main() -> Result<()> {
     let state = Arc::new(AppState {
         media_path,
         data_dir,
+        duration_cache: RwLock::new(HashMap::new()),
     });
 
     // Build router
@@ -61,6 +64,7 @@ async fn main() -> Result<()> {
         // Small delay to let the server finish binding first
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         loop {
+            trimmer::pre_cache_durations(bg_state.clone()).await;
             trimmer::pre_generate_thumbnails(bg_state.clone()).await;
             // Re-scan every 5 minutes to catch newly added videos
             tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;

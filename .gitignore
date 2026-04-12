@@ -18,6 +18,7 @@ __pycache__/
 
 # Rust build artifacts
 /titanic/target/
+/trimmer/target/
 
 # Node modules
 node_modules/

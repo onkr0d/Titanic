@@ -11,6 +11,7 @@
     let videoDuration = 0;
     let trimStart = 0;
     let trimEnd = 0;
+    let pausedAtTrimEnd = false;
 
     // ---- DOM refs ----
     const $ = (sel) => document.querySelector(sel);
@@ -310,10 +311,10 @@
         // Time display
         timeDisplay.textContent = `${formatTimeShort(videoPlayer.currentTime)} / ${formatTimeShort(videoDuration)}`;
 
-        // Pause at trim end point
-        if (trimEnd < videoDuration && videoPlayer.currentTime >= trimEnd && !videoPlayer.paused) {
+        // Pause once at trim end point (user can resume playback past it)
+        if (trimEnd < videoDuration && videoPlayer.currentTime >= trimEnd && !videoPlayer.paused && !pausedAtTrimEnd) {
+            pausedAtTrimEnd = true;
             videoPlayer.pause();
-            videoPlayer.currentTime = trimEnd;
         }
     }
 
@@ -397,7 +398,10 @@
         function seekFromEvent(e) {
             const rect = progressBar.getBoundingClientRect();
             const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-            videoPlayer.currentTime = pct * videoDuration;
+            const newTime = pct * videoDuration;
+            // Re-arm trim-end pause if seeking before the end point
+            if (newTime < trimEnd) pausedAtTrimEnd = false;
+            videoPlayer.currentTime = newTime;
             updatePlayhead();
         }
 
@@ -474,6 +478,7 @@
                 trimEnd = trimStart + 0.1;
                 endSlider.value = (trimEnd / videoDuration) * 100;
             }
+            pausedAtTrimEnd = false;
             updateSliders();
             updateTimeInputs();
             videoPlayer.currentTime = trimEnd;
@@ -496,6 +501,7 @@
             const t = parseTime(endTimeInput.value);
             if (t !== null && t > trimStart && t <= videoDuration) {
                 trimEnd = t;
+                pausedAtTrimEnd = false;
                 updateSliders();
                 updateTimeInputs();
                 videoPlayer.currentTime = trimEnd;
@@ -543,6 +549,7 @@
             case 'O':
                 trimEnd = videoPlayer.currentTime;
                 if (trimEnd <= trimStart) trimEnd = trimStart + 0.1;
+                pausedAtTrimEnd = false;
                 updateSliders();
                 updateTimeInputs();
                 showToast('End point set', 'info');
@@ -550,6 +557,7 @@
             case 'ArrowLeft':
                 e.preventDefault();
                 videoPlayer.currentTime = Math.max(0, videoPlayer.currentTime - 5);
+                if (videoPlayer.currentTime < trimEnd) pausedAtTrimEnd = false;
                 break;
             case 'ArrowRight':
                 e.preventDefault();

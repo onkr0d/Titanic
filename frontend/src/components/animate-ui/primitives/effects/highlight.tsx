@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable react-hooks/preserve-manual-memoization, react-hooks/refs */
+
 import * as React from 'react';
 import { AnimatePresence, Transition, motion } from 'motion/react';
 

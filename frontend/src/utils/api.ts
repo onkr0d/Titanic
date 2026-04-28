@@ -58,7 +58,7 @@ export const checkBackendHealth = async (): Promise<boolean> => {
             headers
         });
         return response.ok;
-    } catch (error) {
+    } catch {
         return false;
     }
 };

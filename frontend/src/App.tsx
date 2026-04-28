@@ -60,13 +60,14 @@ const App = () => {
             showToast.success("Signed in with Google", {
                 transition: Slide,
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
             let errorMessage = "Error signing in with Google";
 
-            if (error.code === 'auth/internal-error' && error.message.includes('HTTP error 403')) {
+            const err = error as { code?: string; message?: string };
+            if (err.code === 'auth/internal-error' && err.message?.includes('HTTP error 403')) {
                 try {
                     // Try to parse the error message as JSON
-                    const errorMatch = error.message.match(/HTTP Cloud Function returned an error: (.+)/);
+                    const errorMatch = err.message.match(/HTTP Cloud Function returned an error: (.+)/);
                     if (errorMatch) {
                         const functionError = JSON.parse(errorMatch[1]);
                         if (functionError.error && functionError.error.message) {

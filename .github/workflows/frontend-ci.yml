@@ -1,0 +1,34 @@
+name: CI - Frontend
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - '!frontend/functions/**'
+      - '.github/workflows/frontend-ci.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Typecheck, lint, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Write dummy .env
+        run: cp .env.example .env
+      - name: Type check
+        run: bunx tsc -b
+      - name: Lint
+        run: bun run lint
+      - name: Build
+        run: bunx vite build
+        env:
+          SENTRY_AUTH_TOKEN: ''

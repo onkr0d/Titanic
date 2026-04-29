@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable react-hooks/preserve-manual-memoization, react-hooks/refs -- vendored animate-ui component; React Compiler hints would require a behavior-affecting refactor of upstream code. */
+
 import * as React from 'react';
 import { AnimatePresence, Transition, motion } from 'motion/react';
 

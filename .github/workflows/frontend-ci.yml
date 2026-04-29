@@ -30,7 +30,7 @@ jobs:
       - name: Type check
         run: bunx tsc -b
       - name: Lint
-        run: bun run lint
+        run: bunx eslint src
       - name: Build
         run: bunx vite build
         env:

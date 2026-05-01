@@ -4,7 +4,7 @@ import tempfile
 import requests
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
-from quart import Quart, request, jsonify
+from quart import Quart, request, jsonify, g
 from quart.wrappers import Request
 from quart.formparser import FormDataParser
 from quart_cors import cors
@@ -110,23 +110,46 @@ except PermissionError as e:
         logger.error(f"Compressed directory {COMPRESSED_FOLDER} is not accessible")
         raise
 
-def _cleanup_upload_artifacts(part_path, filepath):
-    for path in (part_path, filepath):
-        if not path:
-            continue
-        try:
-            os.remove(path)
-            logger.debug(f"Cleaned up upload artifact: {path}")
-        except OSError:
-            pass
+def _remove_quietly(path):
+    try:
+        os.remove(path)
+        logger.debug(f"Cleaned up upload artifact: {path}")
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        # Permissions, busy handles, etc. — surface so disk leaks don't go unnoticed.
+        logger.warning(f"Failed to remove upload artifact {path}: {e}")
+
+
+def _cleanup_upload_artifacts():
+    """Remove any .part files this request created plus the final filepath if set.
+
+    Pulled from `g` so that uploads which fail *before* the handler captures the temp
+    path (e.g. RequestTimeout inside `await request.form`) still get cleaned up.
+    """
+    for path in getattr(g, '_upload_parts', ()):
+        _remove_quietly(path)
+    g._upload_parts = []
+    final_path = getattr(g, '_upload_final_path', None)
+    if final_path:
+        _remove_quietly(final_path)
+        g._upload_final_path = None
 
 
 def _upload_stream_factory(total_content_length, content_type, filename, content_length=None):
     # Write the upload directly to UNCOMPRESSED_FOLDER so the post-parse step is an
     # O(1) os.replace rather than a 20GB copy across filesystems.
-    return tempfile.NamedTemporaryFile(
+    f = tempfile.NamedTemporaryFile(
         dir=UNCOMPRESSED_FOLDER, delete=False, prefix='upload_', suffix='.part'
     )
+    # Register the path in request-local state so cleanup can find it even if
+    # parsing aborts before the handler captures `file.stream.name`.
+    parts = getattr(g, '_upload_parts', None)
+    if parts is None:
+        parts = []
+        g._upload_parts = parts
+    parts.append(f.name)
+    return f
 
 
 class _StreamingRequest(Request):
@@ -141,6 +164,14 @@ class _StreamingRequest(Request):
 
 
 app.request_class = _StreamingRequest
+
+
+@app.teardown_request
+async def _teardown_upload_cleanup(_exc):
+    # Safety net: any .part files registered by _upload_stream_factory that the handler
+    # didn't consume (early return, parse-time exception, etc.) get removed here.
+    if getattr(g, '_upload_parts', None) or getattr(g, '_upload_final_path', None):
+        _cleanup_upload_artifacts()
 
 ffmpeg_queue = Queue('ffmpeg', connection=Redis(), default_timeout=19800) # 5.5 hours
 umbrel_queue = Queue('umbrel', connection=Redis(), default_timeout=7200) # 2 hours
@@ -210,13 +241,13 @@ async def upload_video():
     The body is streamed directly to UNCOMPRESSED_FOLDER by _upload_stream_factory,
     so the only post-parse work is an os.replace to the final filename.
     """
-    part_path = None
-    filepath = None
     try:
         logger.debug(f"Received upload request from user: {request.user.get('email', 'unknown')}")
 
         # Get form data asynchronously - Quart streams the file body straight to disk
         # via _upload_stream_factory, so no extra buffering happens here.
+        # NOTE: 6h BODY_TIMEOUT means a single slow upload occupies a Hypercorn worker
+        # for that long. Fine at current traffic; revisit if upload concurrency grows.
         form = await request.form
         files = await request.files
 
@@ -234,8 +265,9 @@ async def upload_video():
             logger.error("Empty filename")
             return jsonify({'error': 'No selected file'}), 400
 
-        # Path of the on-disk .part file written by _upload_stream_factory
-        part_path = getattr(file.stream, 'name', None)
+        # `file.stream` is the NamedTemporaryFile returned by _upload_stream_factory,
+        # so `.name` is the on-disk .part path we registered in `g._upload_parts`.
+        part_path = file.stream.name
 
         logger.debug(f"Received file: {file.filename}, compression: {should_compress}, folder: {folder}")
 
@@ -246,24 +278,37 @@ async def upload_video():
         filename = secure_filename(file.filename)
         filename = filename.replace("_", " ")  # undo stupid whitespace -> _ replacement
         target_dir = app.config['UNCOMPRESSED_FOLDER']
-        filepath = os.path.join(target_dir, filename)
+        base, ext = os.path.splitext(filename)
+        candidate = os.path.join(target_dir, filename)
 
         # Additional security check
-        if not is_safe_path(filepath):
-            logger.error(f"Invalid file path: {filepath}")
+        if not is_safe_path(candidate):
+            logger.error(f"Invalid file path: {candidate}")
             return jsonify({'error': 'Invalid file path'}), 400
 
-        # Create unique filename to prevent overwriting
-        base, ext = os.path.splitext(filename)
-        counter = 1
-        while os.path.exists(filepath):
-            filepath = os.path.join(target_dir, f"{base}_{counter}{ext}")
-            counter += 1
+        # Atomically claim a unique filename via O_EXCL — avoids the TOCTOU race where
+        # two concurrent uploads with the same filename pick the same target.
+        counter = 0
+        while True:
+            try:
+                fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+                os.close(fd)
+                break
+            except FileExistsError:
+                counter += 1
+                candidate = os.path.join(target_dir, f"{base}_{counter}{ext}")
+                if not is_safe_path(candidate):
+                    return jsonify({'error': 'Invalid file path'}), 400
+
+        filepath = candidate
+        g._upload_final_path = filepath
 
         # Close the temp file handle, then rename it into place — same fs, O(1).
+        # os.replace clobbers the 0-byte placeholder we just created with O_EXCL.
         file.close()
         os.replace(part_path, filepath)
-        part_path = None
+        # Drop the renamed .part from the tracked list so cleanup won't try again.
+        g._upload_parts = [p for p in getattr(g, '_upload_parts', ()) if p != part_path]
         logger.debug(f"File saved: {filepath}")
         
         # Enqueue the video processing job only if compression is enabled
@@ -309,20 +354,22 @@ async def upload_video():
             # If compression is disabled, just upload the original file
             umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, args=[filepath], meta=job_meta)
         
+        # Job successfully enqueued — handler owns the file no longer; don't clean up.
+        g._upload_final_path = None
         return jsonify({
             'message': 'File uploaded successfully',
             'filename': os.path.basename(filepath)
         }), 200
-        
+
     except RequestTimeout:
         # Body didn't arrive within BODY_TIMEOUT — surface 408 instead of swallowing
         # it into a generic 500 so the frontend can show a meaningful message.
         logger.warning("Upload aborted: client did not finish body within BODY_TIMEOUT")
-        _cleanup_upload_artifacts(part_path, filepath)
+        _cleanup_upload_artifacts()
         return jsonify({'error': 'Upload timed out — connection too slow to finish within the server window'}), 408
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
-        _cleanup_upload_artifacts(part_path, filepath)
+        _cleanup_upload_artifacts()
         return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
 
 @app.route('/api/health')

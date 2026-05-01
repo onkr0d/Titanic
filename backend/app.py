@@ -1,14 +1,18 @@
 import asyncio
+import tempfile
 
 import requests
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
 from quart import Quart, request, jsonify
+from quart.wrappers import Request
+from quart.formparser import FormDataParser
 from quart_cors import cors
 from redis import Redis
 from rq import Queue
 import os
 from quart import abort
+from werkzeug.exceptions import RequestTimeout
 from werkzeug.utils import secure_filename
 import logging
 from jobs.job import compress_video, upload_video_to_umbrel
@@ -17,7 +21,6 @@ from firebase_admin import credentials, auth, app_check
 from functools import wraps
 
 import jwt
-import aiofiles
 import sentry_sdk
 from sentry_sdk.integrations.quart import QuartIntegration
 
@@ -91,7 +94,7 @@ app.config['UNCOMPRESSED_FOLDER'] = UNCOMPRESSED_FOLDER
 app.config['COMPRESSED_FOLDER'] = COMPRESSED_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024 * 1024  # 20GB max file size
 app.config['MAX_FORM_MEMORY_SIZE'] = 1 * 1024 * 1024  # Only keep 1MB in memory, rest goes to temp file
-app.config['BODY_TIMEOUT'] = 3600  # 1 hour timeout for large uploads
+app.config['BODY_TIMEOUT'] = 6 * 3600  # 6 hours — accommodates 20GB on slow residential uplinks
 
 # Ensure upload directories exist
 try:
@@ -106,6 +109,38 @@ except PermissionError as e:
     if not os.path.exists(COMPRESSED_FOLDER) or not os.access(COMPRESSED_FOLDER, os.W_OK):
         logger.error(f"Compressed directory {COMPRESSED_FOLDER} is not accessible")
         raise
+
+def _cleanup_upload_artifacts(part_path, filepath):
+    for path in (part_path, filepath):
+        if not path:
+            continue
+        try:
+            os.remove(path)
+            logger.debug(f"Cleaned up upload artifact: {path}")
+        except OSError:
+            pass
+
+
+def _upload_stream_factory(total_content_length, content_type, filename, content_length=None):
+    # Write the upload directly to UNCOMPRESSED_FOLDER so the post-parse step is an
+    # O(1) os.replace rather than a 20GB copy across filesystems.
+    return tempfile.NamedTemporaryFile(
+        dir=UNCOMPRESSED_FOLDER, delete=False, prefix='upload_', suffix='.part'
+    )
+
+
+class _StreamingRequest(Request):
+    def make_form_data_parser(self) -> FormDataParser:
+        return self.form_data_parser_class(
+            max_content_length=self.max_content_length,
+            max_form_memory_size=self.max_form_memory_size,
+            max_form_parts=self.max_form_parts,
+            cls=self.parameter_storage_class,
+            stream_factory=_upload_stream_factory,
+        )
+
+
+app.request_class = _StreamingRequest
 
 ffmpeg_queue = Queue('ffmpeg', connection=Redis(), default_timeout=19800) # 5.5 hours
 umbrel_queue = Queue('umbrel', connection=Redis(), default_timeout=7200) # 2 hours
@@ -172,82 +207,64 @@ def is_safe_path(filepath):
 async def upload_video():
     """
     Quart-native async file upload handler.
-    Uses await request.files and await file.read() for true streaming - no buffering!
-    Based on: https://stackoverflow.com/questions/59135171/uploading-files-to-a-quart-based-server
+    The body is streamed directly to UNCOMPRESSED_FOLDER by _upload_stream_factory,
+    so the only post-parse work is an os.replace to the final filename.
     """
+    part_path = None
+    filepath = None
     try:
         logger.debug(f"Received upload request from user: {request.user.get('email', 'unknown')}")
-        
-        # Get form data asynchronously - Quart streams this without buffering
+
+        # Get form data asynchronously - Quart streams the file body straight to disk
+        # via _upload_stream_factory, so no extra buffering happens here.
         form = await request.form
         files = await request.files
-        
+
         # Extract form fields
         should_compress = form.get('shouldCompress', 'true').lower() == 'true'
         folder = form.get('folder', '').strip() or None
-        
+
         # Get uploaded file
         file = files.get('file')
         if not file:
             logger.error("No file part in request")
             return jsonify({'error': 'No file part'}), 400
-        
+
         if not file.filename or file.filename == '':
             logger.error("Empty filename")
             return jsonify({'error': 'No selected file'}), 400
-        
+
+        # Path of the on-disk .part file written by _upload_stream_factory
+        part_path = getattr(file.stream, 'name', None)
+
         logger.debug(f"Received file: {file.filename}, compression: {should_compress}, folder: {folder}")
-        
+
         if not allowed_file(file.filename):
             return jsonify({'error': 'Invalid file type'}), 400
-        
+
         # Secure the filename
         filename = secure_filename(file.filename)
         filename = filename.replace("_", " ")  # undo stupid whitespace -> _ replacement
         target_dir = app.config['UNCOMPRESSED_FOLDER']
         filepath = os.path.join(target_dir, filename)
-        
+
         # Additional security check
         if not is_safe_path(filepath):
             logger.error(f"Invalid file path: {filepath}")
             return jsonify({'error': 'Invalid file path'}), 400
-        
+
         # Create unique filename to prevent overwriting
         base, ext = os.path.splitext(filename)
         counter = 1
         while os.path.exists(filepath):
             filepath = os.path.join(target_dir, f"{base}_{counter}{ext}")
             counter += 1
-        
-        logger.debug(f"Streaming file to disk: {filepath}")
-        
-        # Stream file to disk in chunks using async I/O to prevent blocking the event loop
-        # Using 8MB chunks for better performance with large files (per best practices)
-        chunk_size = 8 * 1024 * 1024  # 8MB chunks - optimal for large files
-        bytes_written = 0
-        
-        # Use aiofiles for non-blocking async file operations
-        async with aiofiles.open(filepath, 'wb') as f:
-            while True:
-                # Read chunk synchronously from Quart's temp file
-                # Note: file.read() is sync but Quart has already streamed to temp disk
-                chunk = file.read(chunk_size)
-                if not chunk:
-                    break
-                # Write asynchronously to prevent blocking event loop
-                await f.write(chunk)
-                bytes_written += len(chunk)
-                
-                # Log progress every 500MB
-                if bytes_written % (500 * 1024 * 1024) < chunk_size:
-                    logger.debug(f"Written {bytes_written / (1024*1024):.1f} MB")
-        
-        logger.debug(f"File saved successfully: {bytes_written / (1024*1024):.1f} MB total")
-        
-        # Close Quart's temp file handle
-        # No need for try/except - if file doesn't exist, we wouldn't have reached here
+
+        # Close the temp file handle, then rename it into place — same fs, O(1).
         file.close()
-        logger.debug("Temp file handle closed")
+        os.replace(part_path, filepath)
+        part_path = None
+        logger.debug(f"File saved: {filepath}")
         
         # Enqueue the video processing job only if compression is enabled
         # Store user UID instead of raw Firebase ID token
@@ -297,15 +314,15 @@ async def upload_video():
             'filename': os.path.basename(filepath)
         }), 200
         
+    except RequestTimeout:
+        # Body didn't arrive within BODY_TIMEOUT — surface 408 instead of swallowing
+        # it into a generic 500 so the frontend can show a meaningful message.
+        logger.warning("Upload aborted: client did not finish body within BODY_TIMEOUT")
+        _cleanup_upload_artifacts(part_path, filepath)
+        return jsonify({'error': 'Upload timed out — connection too slow to finish within the server window'}), 408
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
-        # Clean up file if it exists
-        if 'filepath' in locals() and os.path.exists(filepath):
-            try:
-                os.remove(filepath)
-                logger.debug(f"Cleaned up file after error: {filepath}")
-            except:
-                pass
+        _cleanup_upload_artifacts(part_path, filepath)
         return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
 
 @app.route('/api/health')

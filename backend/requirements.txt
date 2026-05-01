@@ -46,7 +46,6 @@ pyparsing==3.3.2
 Quart==0.20.0
 quart-cors==0.8.0
 sentry-sdk[quart,rq]==2.58.0
-aiofiles==25.1.0
 redis==7.4.0
 requests==2.33.1
 requests-toolbelt==1.0.0

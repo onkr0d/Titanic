@@ -56,7 +56,7 @@ impl From<MultipartError> for AppError {
     }
 }
 
-const CONTENT_LENGTH_LIMIT: usize = 10 * 1024 * 1024 * 1024; // 10GB
+const CONTENT_LENGTH_LIMIT: usize = 20 * 1024 * 1024 * 1024; // 20GB
 
 /// Build the axum router with all routes and middleware.
 /// Extracted from `main()` so integration tests can use it.

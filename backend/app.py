@@ -89,7 +89,7 @@ ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv', 'm4v', 'avi', 'w
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['UNCOMPRESSED_FOLDER'] = UNCOMPRESSED_FOLDER
 app.config['COMPRESSED_FOLDER'] = COMPRESSED_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024 * 1024  # 10GB max file size
+app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024 * 1024  # 20GB max file size
 app.config['MAX_FORM_MEMORY_SIZE'] = 1 * 1024 * 1024  # Only keep 1MB in memory, rest goes to temp file
 app.config['BODY_TIMEOUT'] = 3600  # 1 hour timeout for large uploads
 

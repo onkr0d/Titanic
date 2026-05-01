@@ -348,6 +348,11 @@ async def upload_video():
         else:
             logger.debug("No folder specified for upload")
 
+        # TODO: enqueue race — if ffmpeg enqueues but umbrel raises (e.g. transient
+        # Redis), the except path deletes filepath while an ffmpeg job still references
+        # it. Fix is to reorder: do all fallible work (Firebase exchange) before the
+        # rename, then treat the enqueue pair as the commit point with best-effort
+        # cancel of ffmpeg_job on umbrel failure. See PR #235 review thread.
         if should_compress:
             ffmpeg_job = ffmpeg_queue.enqueue(compress_video, args=[filepath], result_ttl=86400)
             # Store user context instead of raw tokens to avoid expiration issues

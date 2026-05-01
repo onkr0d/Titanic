@@ -291,7 +291,9 @@ async def upload_video():
         counter = 0
         while True:
             try:
-                fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+                # No mode arg: os.replace below swaps in the .part file's inode
+                # (NamedTemporaryFile default 0o600), so the placeholder mode is moot.
+                fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
                 os.close(fd)
                 break
             except FileExistsError:

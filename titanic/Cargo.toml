@@ -30,7 +30,7 @@ sanitize-filename = "0.6.0"
 path-clean = "1.0.1"
 tokio-util = { version = "0.7.18", features = ["io"] }
 openssl = { version = "0.10", features = ["vendored"] }
-sentry = { version = "0.47.0", features = ["tracing"] }
+sentry = { version = "0.48.1", features = ["tracing"] }
 
 [dev-dependencies]
 hyper = "1"

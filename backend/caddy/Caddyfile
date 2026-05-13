@@ -47,7 +47,7 @@ compress.ivan.boston {
         respond 200
     }
 
-	# Reverse proxy to flask service
+	# Reverse proxy to quart service
 	reverse_proxy localhost:5000 {
 		header_up Host {host}
 		header_up X-Real-IP {remote_host}

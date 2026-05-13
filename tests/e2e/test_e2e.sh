@@ -4,7 +4,7 @@
 set -euo pipefail
 
 UMBREL_URL="http://localhost:3029"
-FLASK_URL="http://localhost:6969"
+QUART_URL="http://localhost:6969"
 PASS=0
 FAIL=0
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -29,7 +29,7 @@ wait_for() {
 }
 
 wait_for "$UMBREL_URL/health" "Umbrel (Rust)"
-wait_for "$FLASK_URL/health"  "Flask (Python)"
+wait_for "$QUART_URL/health"  "Quart (Python)"
 
 # ── Umbrel (Rust) tests ────────────────────────────────────────────
 echo ""
@@ -103,36 +103,36 @@ fi
 status=$(curl -s -o /dev/null -w "%{http_code}" "$UMBREL_URL/api/space")
 [ "$status" = "200" ] && pass "GET /api/space → 200" || fail "GET /api/space" "got $status"
 
-# ── Flask (Python) tests ───────────────────────────────────────────
+# ── Quart (Python) tests ───────────────────────────────────────────
 echo ""
-echo "🐍 Flask (Python) service tests"
+echo "🐍 Quart (Python) service tests"
 
-status=$(curl -s -o /dev/null -w "%{http_code}" "$FLASK_URL/health")
+status=$(curl -s -o /dev/null -w "%{http_code}" "$QUART_URL/health")
 [ "$status" = "200" ] && pass "GET /health → 200" || fail "GET /health" "got $status"
 
 # /api/health (authenticated — IS_DEV bypasses token check)
-status=$(curl -s -o /dev/null -w "%{http_code}" "$FLASK_URL/api/health")
+status=$(curl -s -o /dev/null -w "%{http_code}" "$QUART_URL/api/health")
 [ "$status" = "200" ] && pass "GET /api/health → 200" || fail "GET /api/health" "got $status"
 
 # /api/space — proxies to Umbrel
-status=$(curl -s -o /dev/null -w "%{http_code}" "$FLASK_URL/api/space")
+status=$(curl -s -o /dev/null -w "%{http_code}" "$QUART_URL/api/space")
 [ "$status" = "200" ] && pass "GET /api/space → 200" || fail "GET /api/space" "got $status"
 
-body=$(curl -sf "$FLASK_URL/api/space")
+body=$(curl -sf "$QUART_URL/api/space")
 echo "$body" | grep -q '"total"' && pass "GET /api/space has disk fields" || fail "GET /api/space body" "missing 'total'"
 
 # /api/folders — proxies to Umbrel
-status=$(curl -s -o /dev/null -w "%{http_code}" "$FLASK_URL/api/folders")
+status=$(curl -s -o /dev/null -w "%{http_code}" "$QUART_URL/api/folders")
 [ "$status" = "200" ] && pass "GET /api/folders → 200" || fail "GET /api/folders" "got $status"
 
-body=$(curl -sf "$FLASK_URL/api/folders")
+body=$(curl -sf "$QUART_URL/api/folders")
 echo "$body" | grep -q '"folders"' && pass "GET /api/folders has 'folders' key" || fail "GET /api/folders body" "missing 'folders'"
 
 # /api/config — proxies Umbrel settings, extracts default_folder
-status=$(curl -s -o /dev/null -w "%{http_code}" "$FLASK_URL/api/config")
+status=$(curl -s -o /dev/null -w "%{http_code}" "$QUART_URL/api/config")
 [ "$status" = "200" ] && pass "GET /api/config → 200" || fail "GET /api/config" "got $status"
 
-body=$(curl -sf "$FLASK_URL/api/config")
+body=$(curl -sf "$QUART_URL/api/config")
 echo "$body" | grep -q '"default_folder"' && pass "GET /api/config has 'default_folder' key" || fail "GET /api/config body" "missing 'default_folder'"
 
 # ── Summary ────────────────────────────────────────────────────────

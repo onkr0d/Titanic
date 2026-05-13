@@ -3,11 +3,11 @@
 
 services:
   # Backend services (from backend/docker-compose.build.yml)
-  flask:
+  quart:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: titanic_flask_dev
+    container_name: titanic_quart_dev
     command: >
       sh -c "redis-server &
              python worker.py ffmpeg &
@@ -16,7 +16,7 @@ services:
     ports:
       - "6969:5000"
     volumes:
-      # Mount source code for hot-reloading (Flask debug mode will use it)
+      # Mount source code for hot-reloading (Quart debug mode will use it)
       - ./backend:/app
     environment:
       - PYTHONUNBUFFERED=1

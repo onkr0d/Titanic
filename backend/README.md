@@ -1,6 +1,6 @@
 # Backend Service
 
-This directory contains the Flask backend service for the Titanic project.
+This directory contains the Quart backend service for the Titanic project.
 
 ## Local Development
 

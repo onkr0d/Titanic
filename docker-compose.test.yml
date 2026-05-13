@@ -28,12 +28,12 @@ services:
       retries: 10
       start_period: 10s
 
-  flask:
-    image: titanic-flask:latest
+  quart:
+    image: titanic-quart:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: titanic_test_flask
+    container_name: titanic_test_quart
     command: >
       sh -c "redis-server &
              python app.py"

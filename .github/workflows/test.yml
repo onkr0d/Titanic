@@ -59,8 +59,8 @@ jobs:
           docker buildx bake -f docker-compose.test.yml \
             --set 'umbrel.cache-from=type=gha,scope=e2e-umbrel' \
             --set 'umbrel.cache-to=type=gha,mode=max,scope=e2e-umbrel' \
-            --set 'flask.cache-from=type=gha,scope=e2e-flask' \
-            --set 'flask.cache-to=type=gha,mode=max,scope=e2e-flask' \
+            --set 'quart.cache-from=type=gha,scope=e2e-quart' \
+            --set 'quart.cache-to=type=gha,mode=max,scope=e2e-quart' \
             --load
 
       - name: Start services

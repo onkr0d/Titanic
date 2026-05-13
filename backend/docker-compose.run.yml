@@ -1,5 +1,5 @@
 services:
-  flask:
+  quart:
     image: ghcr.io/onkr0d/titanic/backend:latest
     network_mode: host  # Use host networking to access Tailscale
     user: "${UID:-1000}:${GID:-1000}"  # Use host user ID or default to 1000
@@ -28,12 +28,12 @@ services:
 
   caddy:
     image: ghcr.io/onkr0d/titanic/caddy:latest
-    network_mode: host  # Use host networking to match Flask
+    network_mode: host  # Use host networking to match Quart
     volumes:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - flask
+      - quart
     healthcheck:
       test: ["CMD", "curl", "-f", "-k", "https://localhost/health"]
       interval: 30s

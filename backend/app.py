@@ -173,7 +173,7 @@ async def _teardown_upload_cleanup(_exc):
     if getattr(g, '_upload_parts', None) or getattr(g, '_upload_final_path', None):
         _cleanup_upload_artifacts()
 
-ffmpeg_queue = Queue('ffmpeg', connection=Redis(), default_timeout=19800) # 5.5 hours
+ffmpeg_queue = Queue('ffmpeg', connection=Redis(), default_timeout=43200) # 12 hours, probably bad :(
 umbrel_queue = Queue('umbrel', connection=Redis(), default_timeout=7200) # 2 hours
 
 # TODO: set Firebase hosting IP to be static, so I can whitelist it in the backend??? 🤔
@@ -184,7 +184,7 @@ def verify_firebase_token(f):
             # When in development mode, we bypass token verification and mock the user.
             request.user = {'email': 'dev@example.com', 'uid': 'dev-user'}
             return await f(*args, **kwargs)
-        
+
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'No authorization token provided'}), 401
@@ -198,7 +198,7 @@ def verify_firebase_token(f):
             return await f(*args, **kwargs)
         except Exception as e:
             logger.error(f"Token verification failed: {str(e)}")
-            return jsonify({'error': 'Invalid authorization token'}), 401        
+            return jsonify({'error': 'Invalid authorization token'}), 401
     return decorated_function
 
 @app.before_request
@@ -206,14 +206,14 @@ async def verify_app_check() -> None:
     # no AppCheck for OPTIONS requests (CORS preflight), health endpoint, or dev mode
     if IS_DEV or request.method == 'OPTIONS' or request.path == '/health':
         return
-    
+
     app_check_token = request.headers.get("X-Firebase-AppCheck", default="")
     try:
         app_check.verify_token(app_check_token)
         # If verify_token() succeeds, okay to continue to route handler.
     except (ValueError, jwt.exceptions.DecodeError):
         abort(401)
-    
+
 def allowed_file(filename):
     # Check for null bytes
     if '\0' in filename:
@@ -312,7 +312,7 @@ async def upload_video():
         # Drop the renamed .part from the tracked list so cleanup won't try again.
         g._upload_parts = [p for p in getattr(g, '_upload_parts', ()) if p != part_path]
         logger.debug(f"File saved: {filepath}")
-        
+
         # Enqueue the video processing job only if compression is enabled
         # Store user UID instead of raw Firebase ID token
         # The raw ID token expires in 1 hour, but we can generate fresh ones using the UID
@@ -360,7 +360,7 @@ async def upload_video():
         else:
             # If compression is disabled, just upload the original file
             umbrel_job = umbrel_queue.enqueue(upload_video_to_umbrel, args=[filepath], meta=job_meta)
-        
+
         # Job successfully enqueued — handler owns the file no longer; don't clean up.
         g._upload_final_path = None
         return jsonify({
@@ -446,7 +446,7 @@ async def get_folders():
         logger.debug("Fetching folders from Umbrel server")
         # Build folders URL from base server URL
         umbrel_base_url = os.environ.get('UMBREL_SERVER_URL', 'http://umbrel:3029')
-        
+
         umbrel_url = umbrel_base_url + '/api/folders'
 
         # Forward the authorization headers

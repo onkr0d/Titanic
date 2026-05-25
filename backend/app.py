@@ -173,7 +173,7 @@ async def _teardown_upload_cleanup(_exc):
     if getattr(g, '_upload_parts', None) or getattr(g, '_upload_final_path', None):
         _cleanup_upload_artifacts()
 
-ffmpeg_queue = Queue('ffmpeg', connection=Redis(), default_timeout=43200) # 12 hours, probably bad :(
+ffmpeg_queue = Queue('ffmpeg', connection=Redis(), default_timeout=86400) # 24 hours, probably really bad :(
 umbrel_queue = Queue('umbrel', connection=Redis(), default_timeout=7200) # 2 hours
 
 # TODO: set Firebase hosting IP to be static, so I can whitelist it in the backend??? 🤔

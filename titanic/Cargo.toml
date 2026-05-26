@@ -10,7 +10,7 @@ tokio = { version = "1.50", features = ["full"] }
 tower = "0.5.3"
 tower-http = { version = "0.6.11", features = ["cors", "limit", "trace"] }
 serde = { version = "1.0.203", features = ["derive"] }
-serde_json = "1.0.149"
+serde_json = "1.0.150"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 anyhow = "1.0.102"
@@ -18,7 +18,7 @@ thiserror = "2.0.18"
 uuid = { version = "1.23", features = ["v4"] }
 chrono = { version = "0.4.44", features = ["serde"] }
 futures = "0.3"
-reqwest = "0.13.3"
+reqwest = "0.13.4"
 jsonwebtoken = { version = "10.4.0",  features = ["aws_lc_rs"] }
 base64 = "0.22.1"
 sha2 = "0.11"

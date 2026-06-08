@@ -45,11 +45,11 @@ pyOpenSSL==26.2.0
 pyparsing==3.3.2
 Quart==0.20.0
 quart-cors==0.8.0
-sentry-sdk[quart,rq]==2.61.1
+sentry-sdk[quart,rq]==2.62.0
 redis==8.0.0
 requests==2.34.2
 requests-toolbelt==1.0.0
-rq==2.9.0
+rq==2.9.1
 rsa==4.9.1
 service-identity==26.1.0
 uritemplate==4.2.0

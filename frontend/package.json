@@ -20,7 +20,7 @@
     "@sentry/react": "^10.43.0",
     "@sentry/vite-plugin": "^5.2.1",
     "@tailwindcss/vite": "^4.2.1",
-    "axios": "^1.13.5",
+    "axios": "^1.16.0",
     "caniuse-lite": "^1.0.30001779",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

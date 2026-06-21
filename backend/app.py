@@ -278,6 +278,158 @@ def is_safe_path(filepath):
         return False
 
 
+class UploadError(Exception):
+    """Abort an upload with a specific HTTP status.
+
+    Raised by the upload helpers; caught in upload_video, which runs artifact
+    cleanup and returns `message` as JSON with `status_code`.
+    """
+
+    def __init__(self, status_code, message):
+        super().__init__(message)
+        self.status_code = status_code
+        self.message = message
+
+
+def _ensure_disk_space(content_length):
+    """Reject up front if the volume can't hold this upload plus a safety margin.
+
+    Avoids streaming gigabytes to disk only to hit ENOSPC mid-parse. content_length
+    is the full multipart body (a slight over-estimate of the file itself), which
+    errs in the conservative direction. A missing Content-Length (e.g. chunked
+    transfer-encoding) can't be checked, so we let it through.
+    """
+    if not content_length:
+        return
+    try:
+        free_bytes = shutil.disk_usage(UNCOMPRESSED_FOLDER).free
+    except OSError as e:
+        logger.warning(f"Could not check free disk space, proceeding anyway: {e}")
+        return
+    needed = content_length + UPLOAD_DISK_SAFETY_MARGIN
+    if free_bytes < needed:
+        logger.warning(
+            f"Rejecting upload: need {needed} bytes "
+            f"(upload {content_length} + {UPLOAD_DISK_SAFETY_MARGIN} margin), "
+            f"only {free_bytes} free on {UNCOMPRESSED_FOLDER}"
+        )
+        raise UploadError(
+            507, "Not enough free disk space on the server to accept this upload"
+        )
+
+
+def _claim_upload_path(file):
+    """Validate the uploaded file and move its streamed .part into a final path.
+
+    Returns the on-disk path. Raises UploadError(400) on a bad name/type or unsafe
+    path. A unique name is claimed atomically via O_EXCL to avoid the TOCTOU race
+    between concurrent uploads of the same filename.
+    """
+    # `file.stream` is the NamedTemporaryFile returned by _upload_stream_factory,
+    # so `.name` is the on-disk .part path we registered in `g._upload_parts`.
+    part_path = file.stream.name
+
+    if not allowed_file(file.filename):
+        raise UploadError(400, "Invalid file type")
+
+    # Secure the filename
+    filename = secure_filename(file.filename)
+    filename = filename.replace("_", " ")  # undo stupid whitespace -> _ replacement
+    target_dir = app.config["UNCOMPRESSED_FOLDER"]
+    base, ext = os.path.splitext(filename)
+    candidate = os.path.join(target_dir, filename)
+
+    if not is_safe_path(candidate):
+        logger.error(f"Invalid file path: {candidate}")
+        raise UploadError(400, "Invalid file path")
+
+    # Atomically claim a unique filename via O_EXCL — avoids the TOCTOU race where
+    # two concurrent uploads with the same filename pick the same target.
+    counter = 0
+    while True:
+        try:
+            # No mode arg: os.replace below swaps in the .part file's inode
+            # (NamedTemporaryFile default 0o600), so the placeholder mode is moot.
+            fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            break
+        except FileExistsError:
+            counter += 1
+            candidate = os.path.join(target_dir, f"{base}_{counter}{ext}")
+            if not is_safe_path(candidate):
+                raise UploadError(400, "Invalid file path")
+
+    filepath = candidate
+    g._upload_final_path = filepath
+
+    # Close the temp file handle, then rename it into place — same fs, O(1).
+    # os.replace clobbers the 0-byte placeholder we just created with O_EXCL.
+    file.close()
+    os.replace(part_path, filepath)
+    # Drop the renamed .part from the tracked list so cleanup won't try again.
+    g._upload_parts = [p for p in getattr(g, "_upload_parts", ()) if p != part_path]
+    logger.debug(f"File saved: {filepath}")
+    return filepath
+
+
+def _mint_refresh_token(user):
+    """Exchange the authenticated user's UID for a Firebase refresh token.
+
+    The job stores a refresh token rather than the raw ID token (which expires in
+    1 hour) so the worker can mint fresh ID tokens when it runs. Network call;
+    raises on failure.
+    """
+    custom_token = auth.create_custom_token(user.get("uid"))
+    if isinstance(custom_token, bytes):
+        custom_token = custom_token.decode("utf-8")
+
+    api_key = os.environ.get("FIREBASE_API_KEY")
+    headers = {}
+    app_check_token = request.headers.get("X-Firebase-AppCheck")
+    if app_check_token:
+        headers["X-Firebase-AppCheck"] = app_check_token  # App Check is enforced here
+
+    resp = requests.post(
+        f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={api_key}",
+        json={"token": custom_token, "returnSecureToken": True},
+        headers=headers,
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()["refreshToken"]  # response also has idToken, expiresIn
+
+
+def _enqueue_processing(filepath, job_meta, should_compress):
+    """Enqueue the upload-to-Umbrel job, optionally behind an ffmpeg compress job.
+
+    The enqueue pair is the commit point. If the umbrel enqueue fails after the
+    ffmpeg job is already queued, best-effort cancel the ffmpeg job so it can't
+    later run against a file the caller's error path is about to delete (the race
+    flagged in PR #235's review).
+    """
+    if not should_compress:
+        # If compression is disabled, just upload the original file
+        umbrel_queue.enqueue(upload_video_to_umbrel, args=[filepath], meta=job_meta)
+        return
+
+    ffmpeg_job = ffmpeg_queue.enqueue(compress_video, args=[filepath], result_ttl=86400)
+    try:
+        umbrel_queue.enqueue(
+            upload_video_to_umbrel, depends_on=ffmpeg_job, meta=job_meta
+        )
+    except Exception:
+        # Best-effort: a worker may already have picked up the ffmpeg job, so this
+        # isn't atomic — but it closes the common case (Redis blip between the two
+        # enqueues) before we re-raise into the caller's cleanup.
+        try:
+            ffmpeg_job.cancel()
+        except Exception as cancel_err:
+            logger.warning(
+                f"Failed to cancel ffmpeg job after umbrel enqueue failure: {cancel_err}"
+            )
+        raise
+
+
 @app.route("/api/upload", methods=["POST"])
 @verify_firebase_token
 async def upload_video():
@@ -291,33 +443,8 @@ async def upload_video():
             f"Received upload request from user: {request.user.get('email', 'unknown')}"
         )
 
-        # Fail fast & cheap: if the volume can't hold this upload, reject now instead
-        # of streaming gigabytes to disk only to hit ENOSPC mid-parse. Content-Length
-        # is the full multipart body (a slight over-estimate of the file itself), which
-        # errs in the conservative direction for a free-space check.
-        content_length = request.content_length
-        if content_length:
-            try:
-                free_bytes = shutil.disk_usage(UNCOMPRESSED_FOLDER).free
-            except OSError as e:
-                logger.warning(
-                    f"Could not check free disk space, proceeding anyway: {e}"
-                )
-                free_bytes = None
-            if (
-                free_bytes is not None
-                and free_bytes < content_length + UPLOAD_DISK_SAFETY_MARGIN
-            ):
-                logger.warning(
-                    f"Rejecting upload: need {content_length + UPLOAD_DISK_SAFETY_MARGIN} bytes "
-                    f"(upload {content_length} + {UPLOAD_DISK_SAFETY_MARGIN} margin), "
-                    f"only {free_bytes} free on {UNCOMPRESSED_FOLDER}"
-                )
-                return jsonify(
-                    {
-                        "error": "Not enough free disk space on the server to accept this upload"
-                    }
-                ), 507
+        # Fail fast & cheap before streaming gigabytes to disk.
+        _ensure_disk_space(request.content_length)
 
         # Get form data asynchronously - Quart streams the file body straight to disk
         # via _upload_stream_factory, so no extra buffering happens here.
@@ -326,125 +453,33 @@ async def upload_video():
         form = await request.form
         files = await request.files
 
-        # Extract form fields
         should_compress = form.get("shouldCompress", "true").lower() == "true"
         folder = form.get("folder", "").strip() or None
 
-        # Get uploaded file
         file = files.get("file")
         if not file:
-            logger.error("No file part in request")
-            return jsonify({"error": "No file part"}), 400
-
-        if not file.filename or file.filename == "":
-            logger.error("Empty filename")
-            return jsonify({"error": "No selected file"}), 400
-
-        # `file.stream` is the NamedTemporaryFile returned by _upload_stream_factory,
-        # so `.name` is the on-disk .part path we registered in `g._upload_parts`.
-        part_path = file.stream.name
+            raise UploadError(400, "No file part")
+        if not file.filename:
+            raise UploadError(400, "No selected file")
 
         logger.debug(
             f"Received file: {file.filename}, compression: {should_compress}, folder: {folder}"
         )
 
-        if not allowed_file(file.filename):
-            return jsonify({"error": "Invalid file type"}), 400
-
-        # Secure the filename
-        filename = secure_filename(file.filename)
-        filename = filename.replace("_", " ")  # undo stupid whitespace -> _ replacement
-        target_dir = app.config["UNCOMPRESSED_FOLDER"]
-        base, ext = os.path.splitext(filename)
-        candidate = os.path.join(target_dir, filename)
-
-        # Additional security check
-        if not is_safe_path(candidate):
-            logger.error(f"Invalid file path: {candidate}")
-            return jsonify({"error": "Invalid file path"}), 400
-
-        # Atomically claim a unique filename via O_EXCL — avoids the TOCTOU race where
-        # two concurrent uploads with the same filename pick the same target.
-        counter = 0
-        while True:
-            try:
-                # No mode arg: os.replace below swaps in the .part file's inode
-                # (NamedTemporaryFile default 0o600), so the placeholder mode is moot.
-                fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.close(fd)
-                break
-            except FileExistsError:
-                counter += 1
-                candidate = os.path.join(target_dir, f"{base}_{counter}{ext}")
-                if not is_safe_path(candidate):
-                    return jsonify({"error": "Invalid file path"}), 400
-
-        filepath = candidate
-        g._upload_final_path = filepath
-
-        # Close the temp file handle, then rename it into place — same fs, O(1).
-        # os.replace clobbers the 0-byte placeholder we just created with O_EXCL.
-        file.close()
-        os.replace(part_path, filepath)
-        # Drop the renamed .part from the tracked list so cleanup won't try again.
-        g._upload_parts = [p for p in getattr(g, "_upload_parts", ()) if p != part_path]
-        logger.debug(f"File saved: {filepath}")
-
-        # Enqueue the video processing job only if compression is enabled
-        # Store user UID instead of raw Firebase ID token
-        # The raw ID token expires in 1 hour, but we can generate fresh ones using the UID
-        job_meta = {
-            "user_uid": request.user.get("uid", "unknown"),
-        }
-
-        custom_token = auth.create_custom_token(request.user.get("uid"))
-        if isinstance(custom_token, bytes):
-            custom_token = custom_token.decode("utf-8")
-
-        api_key = os.environ.get("FIREBASE_API_KEY")
-        headers = {}
-        app_check_token = request.headers.get("X-Firebase-AppCheck")
-        if app_check_token:
-            headers["X-Firebase-AppCheck"] = (
-                app_check_token  # App Check is enforced for this method
-            )
-
-        resp = requests.post(
-            f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={api_key}",
-            json={"token": custom_token, "returnSecureToken": True},
-            headers=headers,
-            timeout=10,
-        )
-        resp.raise_for_status()
-        tokens = resp.json()  # has idToken, refreshToken, expiresIn
-
-        job_meta["refresh_token"] = tokens["refreshToken"]
-
-        # Include folder information in the metadata for the Umbrel job
+        # Do all fallible work (the Firebase token exchange) BEFORE committing the
+        # file to its final path. If it fails here, the upload is still just a
+        # tracked .part that teardown cleans up — nothing committed is stranded.
+        # Store the user's UID plus a refresh token (not the 1h ID token) so the
+        # worker can mint fresh credentials when it runs.
+        job_meta = {"user_uid": request.user.get("uid", "unknown")}
+        job_meta["refresh_token"] = _mint_refresh_token(request.user)
         if folder:
             job_meta["X-Folder"] = folder
             logger.debug(f"Including folder in upload: {folder}")
-        else:
-            logger.debug("No folder specified for upload")
 
-        # TODO: enqueue race — if ffmpeg enqueues but umbrel raises (e.g. transient
-        # Redis), the except path deletes filepath while an ffmpeg job still references
-        # it. Fix is to reorder: do all fallible work (Firebase exchange) before the
-        # rename, then treat the enqueue pair as the commit point with best-effort
-        # cancel of ffmpeg_job on umbrel failure. See PR #235 review thread.
-        if should_compress:
-            ffmpeg_job = ffmpeg_queue.enqueue(
-                compress_video, args=[filepath], result_ttl=86400
-            )
-            # Store user context instead of raw tokens to avoid expiration issues
-            umbrel_job = umbrel_queue.enqueue(
-                upload_video_to_umbrel, depends_on=ffmpeg_job, meta=job_meta
-            )
-        else:
-            # If compression is disabled, just upload the original file
-            umbrel_job = umbrel_queue.enqueue(
-                upload_video_to_umbrel, args=[filepath], meta=job_meta
-            )
+        # Commit point: rename the .part into place, then enqueue the job pair.
+        filepath = _claim_upload_path(file)
+        _enqueue_processing(filepath, job_meta, should_compress)
 
         # Job successfully enqueued — handler owns the file no longer; don't clean up.
         g._upload_final_path = None
@@ -455,6 +490,9 @@ async def upload_video():
             }
         ), 200
 
+    except UploadError as e:
+        _cleanup_upload_artifacts()
+        return jsonify({"error": e.message}), e.status_code
     except RequestTimeout:
         # Body didn't arrive within BODY_TIMEOUT — surface 408 instead of swallowing
         # it into a generic 500 so the frontend can show a meaningful message.

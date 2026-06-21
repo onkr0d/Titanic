@@ -11,8 +11,6 @@ import { initializeApp } from "firebase/app";
 import { useEffect } from "react";
 import { Slide, ToastContainer } from "react-toastify";
 import { showToast } from "./utils/toast";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 
 // Your web app's Firebase configuration
 const firebaseConfig = {

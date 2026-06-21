@@ -17,6 +17,7 @@ RUN pip install --prefix=/install --no-cache-dir -r requirements.txt
 
 # Copy only the application source files needed
 COPY app.py .
+COPY fileutils.py .
 COPY worker.py .
 COPY hypercorn.toml .
 COPY start.sh .
@@ -44,6 +45,7 @@ COPY --from=builder /install /usr/local
 
 # Copy application code
 COPY --from=builder /app/app.py .
+COPY --from=builder /app/fileutils.py .
 COPY --from=builder /app/worker.py .
 COPY --from=builder /app/hypercorn.toml .
 COPY --from=builder /app/start.sh .

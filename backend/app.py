@@ -20,9 +20,8 @@ from redis import Redis
 from rq import Queue
 from sentry_sdk.integrations.quart import QuartIntegration
 from werkzeug.exceptions import RequestTimeout
-from werkzeug.utils import secure_filename
 
-from fileutils import remove_quietly
+from fileutils import remove_quietly, sanitize_path_component
 from jobs.job import compress_video, upload_video_to_umbrel
 
 IS_DEV = os.environ.get("IS_DEV", "false").lower() == "true"
@@ -332,9 +331,12 @@ def _claim_upload_path(file):
     if not allowed_file(file.filename):
         raise UploadError(400, "Invalid file type")
 
-    # Secure the filename
-    filename = secure_filename(file.filename)
-    filename = filename.replace("_", " ")  # undo stupid whitespace -> _ replacement
+    # Sanitize into a single safe path component (mirrors umbrel) — preserves
+    # '?' and non-ASCII so names aren't silently mangled. is_safe_path below is
+    # the traversal backstop.
+    filename = sanitize_path_component(file.filename)
+    if filename is None:
+        raise UploadError(400, "Invalid filename")
     target_dir = app.config["UNCOMPRESSED_FOLDER"]
     base, ext = os.path.splitext(filename)
     candidate = os.path.join(target_dir, filename)
@@ -455,6 +457,13 @@ async def upload_video():
 
         should_compress = form.get("shouldCompress", "true").lower() == "true"
         folder = form.get("folder", "").strip() or None
+        # Fail fast: reject a bad folder name here (before the expensive compress
+        # job) rather than letting it fail at the umbrel step post-processing.
+        # umbrel re-validates with the same rules as the authoritative check.
+        if folder is not None:
+            folder = sanitize_path_component(folder)
+            if folder is None:
+                raise UploadError(400, "Invalid folder name")
 
         file = files.get("file")
         if not file:

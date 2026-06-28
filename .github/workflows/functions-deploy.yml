@@ -6,6 +6,10 @@ on:
     paths:
       - 'frontend/functions/**'
       - '.github/workflows/functions-deploy.yml'
+
+permissions:
+  contents: read
+
 jobs:
   build_and_deploy_functions:
     runs-on: ubuntu-latest

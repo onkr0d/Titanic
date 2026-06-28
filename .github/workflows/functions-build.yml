@@ -6,6 +6,9 @@ on:
       - 'frontend/functions/**'
       - '.github/workflows/functions-build.yml'
 
+permissions:
+  contents: read
+
 jobs:
   build_functions:
     runs-on: ubuntu-latest

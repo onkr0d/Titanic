@@ -23,6 +23,41 @@ fn ensure_path_within(base: &Path, target: &Path) -> Result<PathBuf, AppError> {
     Ok(absolute_target)
 }
 
+/// Max bytes for a single path component. Linux `NAME_MAX` is 255 bytes on the
+/// common filesystems (ext4, xfs, btrfs); a longer name fails with ENAMETOOLONG.
+const MAX_PATH_COMPONENT_BYTES: usize = 255;
+
+/// Sanitize a user-supplied name (folder or filename) into a single safe path
+/// component, returning `None` if nothing usable remains.
+///
+/// Names round-trip from folders/files that already exist on the Plex volume,
+/// which is Linux, so we keep them faithful — including characters like '?' that
+/// the `sanitize-filename` crate drops by default (it targets the Windows
+/// illegal-char set). Silently rewriting "RV There Yet?" to "RV There Yet" sends
+/// uploads to a different folder than the one selected.
+///
+/// We strip only path separators and control characters so the result can't span
+/// directories, and reject empty / "." / ".." names. `ensure_path_within` is the
+/// containment backstop against traversal.
+///
+/// Names exceeding `MAX_PATH_COMPONENT_BYTES` are rejected rather than truncated:
+/// truncation can corrupt a file extension or silently collide two distinct names,
+/// and anything longer can't be stored on the volume anyway.
+fn sanitize_path_component(name: &str) -> Option<String> {
+    let cleaned: String = name
+        .chars()
+        .filter(|&c| c != '/' && c != '\\' && !c.is_control())
+        .collect();
+    let cleaned = cleaned.trim();
+    if cleaned.is_empty() || cleaned == "." || cleaned == ".." {
+        return None;
+    }
+    if cleaned.len() > MAX_PATH_COMPONENT_BYTES {
+        return None;
+    }
+    Some(cleaned.to_string())
+}
+
 pub struct VideoUploader {
     plex_media_path: PathBuf,
 }
@@ -69,8 +104,11 @@ impl VideoUploader {
             filename, temp_path, folder
         );
 
-        // Sanitize filename
-        let sanitized_filename = sanitize_filename::sanitize(filename);
+        // Sanitize filename into a single safe path component, rejecting names
+        // that reduce to nothing usable.
+        let sanitized_filename = sanitize_path_component(filename).ok_or_else(|| {
+            AppError::UploadError(format!("Invalid filename: {filename:?}"))
+        })?;
         info!("Sanitized filename: {}", sanitized_filename);
 
         // Always use the Clips directory structure
@@ -89,8 +127,9 @@ impl VideoUploader {
                 info!("Saving to Clips directory (default)");
                 (clips_dir.clone(), "Clips directory".to_string())
             } else {
-                // Sanitize folder name as well
-                let sanitized_folder = sanitize_filename::sanitize(folder_name);
+                let sanitized_folder = sanitize_path_component(folder_name).ok_or_else(|| {
+                    AppError::UploadError(format!("Invalid folder name: {folder_name:?}"))
+                })?;
                 let folder_dir = clips_dir.join(&sanitized_folder);
                 let folder_dir = ensure_path_within(&self.plex_media_path, &folder_dir)?;
 
@@ -290,6 +329,39 @@ pub struct SpaceInfo {
 mod tests {
     use super::*;
     use std::fs as std_fs;
+
+    #[test]
+    fn sanitize_component_keeps_name_faithful_as_single_component() {
+        // The bug: "RV There Yet?" must not be rewritten to "RV There Yet".
+        // Chars legal on our Linux target are preserved; only path separators
+        // and control chars are dropped so the result can't span directories.
+        assert_eq!(
+            sanitize_path_component("RV There Yet?").as_deref(),
+            Some("RV There Yet?")
+        );
+        assert_eq!(
+            sanitize_path_component("a/b\\c\0d").as_deref(),
+            Some("abcd")
+        );
+    }
+
+    #[test]
+    fn sanitize_component_rejects_empty_and_traversal_names() {
+        // Containment contract: nothing that could become "current/parent dir"
+        // or escape a single component may survive.
+        for bad in ["", "   ", ".", "..", "/"] {
+            assert_eq!(sanitize_path_component(bad), None, "should reject {bad:?}");
+        }
+    }
+
+    #[test]
+    fn sanitize_component_rejects_oversize_names_at_the_boundary() {
+        // A name the filesystem can store is kept; one byte over NAME_MAX is
+        // rejected (cleanly, rather than failing later with ENAMETOOLONG).
+        let max = "a".repeat(MAX_PATH_COMPONENT_BYTES);
+        assert_eq!(sanitize_path_component(&max).as_deref(), Some(max.as_str()));
+        assert_eq!(sanitize_path_component(&"a".repeat(MAX_PATH_COMPONENT_BYTES + 1)), None);
+    }
 
     #[test]
     fn unique_filename_no_collision() {

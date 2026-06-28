@@ -4,11 +4,40 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # ── Python unit tests (backend) ──────────────────────────────────
+  python-tests:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    if: >-
+      contains(toJSON(github.event.pull_request.title), '[no-test]') == false
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        # Stdlib-only tests, so the exact 3.x doesn't matter; 3.13 keeps the job
+        # fast and broadly available across runners.
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run tests
+        run: pytest
+
   # ── Rust unit + integration tests ────────────────────────────────
   rust-tests:
     name: Rust Tests

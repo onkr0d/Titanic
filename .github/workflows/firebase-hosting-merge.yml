@@ -8,16 +8,17 @@ on:
       - main
     paths:
       - 'frontend/**'
+      # don't deploy frontend when functions change
+      - '!frontend/functions/**'
       - '.github/workflows/firebase-hosting-merge.yml'
 
 permissions:
   contents: read
-  checks: write
 
 jobs:
   build_and_deploy_frontend:
     runs-on: ubuntu-latest
-    env: 
+    env:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
     defaults:
       run:
@@ -39,12 +40,26 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TITANIC_UPLOADER }}
-          channelId: live
-          projectId: titanic-uploader
-          entryPoint: frontend
+      - name: Deploy to Firebase Hosting (tolerate no-op releases)
         env:
           FIREBASE_CLI_EXPERIMENTS: webframeworks
+          FIREBASE_SERVICE_ACCOUNT_TITANIC_UPLOADER: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TITANIC_UPLOADER }}
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_TITANIC_UPLOADER" > "$RUNNER_TEMP/firebase-sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-sa.json"
+
+          # version pinned for string matching
+          set +e
+          deploy_out=$(bunx firebase-tools@15.22.3 deploy --only hosting --project titanic-uploader --non-interactive 2>&1)
+          deploy_code=$?
+          set -e
+          printf '%s\n' "$deploy_out"
+
+          if [ "$deploy_code" -ne 0 ]; then
+            # tolerate the no-op release (rebuilt bundle identical to what's already live)
+            if printf '%s' "$deploy_out" | grep -qE "is the current active version|FAILED_PRECONDITION"; then
+              echo "::notice::bundle unchanged; skipping no-op hosting release"
+              exit 0
+            fi
+            exit "$deploy_code"
+          fi

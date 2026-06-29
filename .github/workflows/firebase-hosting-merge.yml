@@ -16,7 +16,6 @@ on:
 
 permissions:
   contents: read
-  checks: write
 
 jobs:
   build_and_deploy_frontend:
@@ -52,8 +51,10 @@ jobs:
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT_TITANIC_UPLOADER" > "$RUNNER_TEMP/firebase-sa.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-sa.json"
 
+          # Pinned (not @latest) so the no-op error string we match below can't drift
+          # out from under us on an unrelated firebase-tools release.
           set +e
-          deploy_out=$(bunx firebase-tools@latest deploy --only hosting --project titanic-uploader --non-interactive 2>&1)
+          deploy_out=$(bunx firebase-tools@15.22.3 deploy --only hosting --project titanic-uploader --non-interactive 2>&1)
           deploy_code=$?
           set -e
           printf '%s\n' "$deploy_out"
@@ -62,7 +63,8 @@ jobs:
             # When the freshly built bundle is byte-identical to what is already live,
             # Firebase rejects the release with FAILED_PRECONDITION ("is the current
             # active version"). That is a no-op, not a regression — treat it as success.
-            if printf '%s' "$deploy_out" | grep -q "is the current active version"; then
+            # Both signals appear together in that case; match either for resilience.
+            if printf '%s' "$deploy_out" | grep -qE "is the current active version|FAILED_PRECONDITION"; then
               echo "::notice::Frontend bundle is byte-identical to the live release; skipping no-op hosting release."
               exit 0
             fi

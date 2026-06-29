@@ -8,6 +8,10 @@ on:
       - main
     paths:
       - 'frontend/**'
+      # functions live under frontend/ but have their own deploy (functions-deploy.yml).
+      # A functions-only change does not alter the hosting bundle, so deploying here
+      # produces a byte-identical release that Firebase rejects (no-op release).
+      - '!frontend/functions/**'
       - '.github/workflows/firebase-hosting-merge.yml'
 
 permissions:
@@ -39,12 +43,29 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TITANIC_UPLOADER }}
-          channelId: live
-          projectId: titanic-uploader
-          entryPoint: frontend
+      - name: Deploy to Firebase Hosting (tolerate no-op releases)
         env:
           FIREBASE_CLI_EXPERIMENTS: webframeworks
+          FIREBASE_SERVICE_ACCOUNT_TITANIC_UPLOADER: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TITANIC_UPLOADER }}
+        run: |
+          # Authenticate the firebase CLI with the service account.
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_TITANIC_UPLOADER" > "$RUNNER_TEMP/firebase-sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-sa.json"
+
+          set +e
+          deploy_out=$(bunx firebase-tools@latest deploy --only hosting --project titanic-uploader --non-interactive 2>&1)
+          deploy_code=$?
+          set -e
+          printf '%s\n' "$deploy_out"
+
+          if [ "$deploy_code" -ne 0 ]; then
+            # When the freshly built bundle is byte-identical to what is already live,
+            # Firebase rejects the release with FAILED_PRECONDITION ("is the current
+            # active version"). That is a no-op, not a regression — treat it as success.
+            if printf '%s' "$deploy_out" | grep -q "is the current active version"; then
+              echo "::notice::Frontend bundle is byte-identical to the live release; skipping no-op hosting release."
+              exit 0
+            fi
+            echo "::error::Firebase Hosting deploy failed."
+            exit "$deploy_code"
+          fi

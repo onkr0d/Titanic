@@ -8,9 +8,7 @@ on:
       - main
     paths:
       - 'frontend/**'
-      # functions live under frontend/ but have their own deploy (functions-deploy.yml).
-      # A functions-only change does not alter the hosting bundle, so deploying here
-      # produces a byte-identical release that Firebase rejects (no-op release).
+      # don't deploy frontend when functions change
       - '!frontend/functions/**'
       - '.github/workflows/firebase-hosting-merge.yml'
 
@@ -20,7 +18,7 @@ permissions:
 jobs:
   build_and_deploy_frontend:
     runs-on: ubuntu-latest
-    env: 
+    env:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
     defaults:
       run:
@@ -47,12 +45,10 @@ jobs:
           FIREBASE_CLI_EXPERIMENTS: webframeworks
           FIREBASE_SERVICE_ACCOUNT_TITANIC_UPLOADER: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TITANIC_UPLOADER }}
         run: |
-          # Authenticate the firebase CLI with the service account.
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT_TITANIC_UPLOADER" > "$RUNNER_TEMP/firebase-sa.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-sa.json"
 
-          # Pinned (not @latest) so the no-op error string we match below can't drift
-          # out from under us on an unrelated firebase-tools release.
+          # version pinned for string matching
           set +e
           deploy_out=$(bunx firebase-tools@15.22.3 deploy --only hosting --project titanic-uploader --non-interactive 2>&1)
           deploy_code=$?
@@ -60,14 +56,10 @@ jobs:
           printf '%s\n' "$deploy_out"
 
           if [ "$deploy_code" -ne 0 ]; then
-            # When the freshly built bundle is byte-identical to what is already live,
-            # Firebase rejects the release with FAILED_PRECONDITION ("is the current
-            # active version"). That is a no-op, not a regression — treat it as success.
-            # Both signals appear together in that case; match either for resilience.
+            # tolerate the no-op release (rebuilt bundle identical to what's already live)
             if printf '%s' "$deploy_out" | grep -qE "is the current active version|FAILED_PRECONDITION"; then
-              echo "::notice::Frontend bundle is byte-identical to the live release; skipping no-op hosting release."
+              echo "::notice::bundle unchanged; skipping no-op hosting release"
               exit 0
             fi
-            echo "::error::Firebase Hosting deploy failed."
             exit "$deploy_code"
           fi

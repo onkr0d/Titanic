@@ -29,13 +29,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# x265 in our Alpine/ARM container probes CPU topology and can come back with an
-# empty thread pool ("No thread pool allocated, --wpp disabled"), which disables
-# wavefront parallel processing and collapses the HEVC encode to ~2 frame threads
-# — leaving most cores idle and encodes crawling. Forcing an explicit WPP pool
-# sized to the host restores multicore utilization. We set `pools` only (not
-# `frame-threads`): WPP parallelism carries no compression penalty, whereas
-# frame parallelism does, so this is a throughput win at unchanged quality.
+# force pool for multicore util
 _X265_PARAMS = f"pools={os.cpu_count() or 1}"
 
 
@@ -422,7 +416,7 @@ def compress_video(input_file: str) -> str:
                 "22",
                 "-preset",
                 "medium",
-                # Force a WPP thread pool; see _X265_PARAMS note above.
+                # force pools
                 "-x265-params",
                 _X265_PARAMS,
                 "-tag:v",

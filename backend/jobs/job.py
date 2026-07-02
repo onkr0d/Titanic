@@ -29,6 +29,9 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# force pool for multicore util
+_X265_PARAMS = f"pools={os.cpu_count() or 1}"
+
 
 def initialize_firebase():
     """
@@ -413,6 +416,9 @@ def compress_video(input_file: str) -> str:
                 "22",
                 "-preset",
                 "medium",
+                # force pools
+                "-x265-params",
+                _X265_PARAMS,
                 "-tag:v",
                 "hvc1",
                 # copy audio/subs as-is
@@ -446,7 +452,7 @@ def compress_video(input_file: str) -> str:
             logger.error("Video compression failed: %s", e)
             logger.error("FFmpeg stderr: %s", e.stderr)
             # Fallback with ffmpeg-python
-            out_opts = {"c:a": "copy", "map": "0"}
+            out_opts = {"c:a": "copy", "map": "0", "x265-params": _X265_PARAMS}
             ffmpeg.input(source_file).output(
                 output_file,
                 vcodec="libx265",

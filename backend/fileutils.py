@@ -4,6 +4,49 @@ import unicodedata
 
 logger = logging.getLogger(__name__)
 
+# Keys whose values must never leave the process in a Sentry event. Matched
+# case-insensitively against dict keys anywhere in the event tree. "refresh_token"
+# is the important one: it lives in RQ job meta and is a long-lived Firebase
+# credential the RQ integration would otherwise ship to Sentry on a job failure.
+_SENSITIVE_KEYS = frozenset(
+    {
+        "refresh_token",
+        "authorization",
+        "x-firebase-appcheck",
+        "id_token",
+        "custom_token",
+        "token",
+        "password",
+        "api_key",
+        "firebase_api_key",
+    }
+)
+_REDACTED = "[redacted]"
+
+
+def _scrub(value):
+    if isinstance(value, dict):
+        return {
+            k: (_REDACTED if isinstance(k, str) and k.lower() in _SENSITIVE_KEYS else _scrub(v))
+            for k, v in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return type(value)(_scrub(v) for v in value)
+    return value
+
+
+def scrub_event(event, _hint=None):
+    """Sentry `before_send` hook: redact sensitive values before events are sent.
+
+    Walks the whole event tree and blanks any value under a sensitive key. Never
+    raises — a throwing before_send would silently drop the event, so on any error
+    we return the event unchanged rather than lose observability.
+    """
+    try:
+        return _scrub(event)
+    except Exception:  # pragma: no cover - defensive
+        return event
+
 # Max bytes for a single path component. Linux NAME_MAX is 255 bytes on the
 # common filesystems; a longer name fails with ENAMETOOLONG.
 MAX_PATH_COMPONENT_BYTES = 255

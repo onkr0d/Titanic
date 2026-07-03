@@ -10,6 +10,7 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/admin-sdk-cred
       - UMBREL_SERVER_URL=http://umbrel:3029 # tailsale ip
       - FIREBASE_API_KEY=${FIREBASE_API_KEY}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
       - SENTRY_DSN=${SENTRY_QUART_DSN}
       - SENTRY_RQ_DSN=${SENTRY_RQ_DSN}

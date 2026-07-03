@@ -13,6 +13,7 @@ services:
     environment:
       - FIREBASE_PROJECT_ID=test-project
       - IS_DEV=true
+      - DEV_AUTH_BYPASS=true
       - BIND_ADDRESS=0.0.0.0:3029
       - PLEX_MEDIA_PATH=/downloads
       - DATA_DIR=/data
@@ -39,6 +40,8 @@ services:
              python app.py"
     environment:
       - IS_DEV=true
+      - DEV_AUTH_BYPASS=true
+      - HYPERCORN_BIND=0.0.0.0:5000
       - PYTHONUNBUFFERED=1
       - UMBREL_SERVER_URL=http://umbrel:3029
     ports:

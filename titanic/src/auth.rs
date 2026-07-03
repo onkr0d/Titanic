@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::config::Config;
 
@@ -45,7 +45,7 @@ pub struct FirebaseAuth {
     project_id: String,
     client: Client,
     public_keys: Arc<RwLock<HashMap<String, String>>>,
-    is_dev: bool,
+    dev_auth_bypass: bool,
 }
 
 impl FirebaseAuth {
@@ -53,18 +53,25 @@ impl FirebaseAuth {
         let client = Client::new();
         let public_keys = Arc::new(RwLock::new(HashMap::new()));
 
+        if config.dev_auth_bypass {
+            warn!(
+                "DEV_AUTH_BYPASS is ON — Firebase token verification is DISABLED. \
+                 This must never be set in production."
+            );
+        }
+
         Ok(FirebaseAuth {
             project_id: config.firebase_project_id.clone(),
             client,
             public_keys,
-            is_dev: config.is_dev,
+            dev_auth_bypass: config.dev_auth_bypass,
         })
     }
 
     pub async fn verify_token(&self, headers: &HeaderMap) -> Result<FirebaseUser, AppError> {
-        // Bypass auth in development mode
-        if self.is_dev {
-            info!("DEV mode: Bypassing token verification");
+        // Bypass auth only when the explicit local dev bypass is enabled
+        if self.dev_auth_bypass {
+            info!("DEV_AUTH_BYPASS: Bypassing token verification");
             return Ok(FirebaseUser {
                 uid: "dev-user".to_string(),
                 email: "dev@example.com".to_string(),
@@ -230,7 +237,7 @@ mod tests {
             project_id: "test-project".into(),
             client: Client::new(),
             public_keys: Arc::new(RwLock::new(HashMap::new())),
-            is_dev: true,
+            dev_auth_bypass: true,
         }
     }
 
@@ -239,7 +246,7 @@ mod tests {
             project_id: "test-project".into(),
             client: Client::new(),
             public_keys: Arc::new(RwLock::new(HashMap::new())),
-            is_dev: false,
+            dev_auth_bypass: false,
         }
     }
 

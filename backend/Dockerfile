@@ -75,8 +75,9 @@ ENV PATH=/usr/local/bin:$PATH
 # Switch to non-root user
 USER flask
 
-# Expose ports
-EXPOSE 5000 6379
+# Expose the HTTP port only. Redis (6379) is loopback-only and must not be
+# advertised or published off-host.
+EXPOSE 5000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \

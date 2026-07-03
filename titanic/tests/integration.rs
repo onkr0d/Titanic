@@ -28,6 +28,7 @@ fn test_app() -> (Router<()>, tempfile::TempDir) {
         firebase_project_id: "test-project".into(),
         plex_media_path: media_dir.to_string_lossy().into_owned(),
         is_dev: true,
+        dev_auth_bypass: true,
         data_dir: data_dir.to_string_lossy().into_owned(),
     };
 

@@ -8,6 +8,10 @@ pub struct Config {
     pub firebase_project_id: String,
     pub plex_media_path: String,
     pub is_dev: bool,
+    /// Whether to bypass Firebase auth. Deliberately separate from `is_dev` so a
+    /// stray `IS_DEV=true` in production can't silently disable authentication;
+    /// requires both `IS_DEV=true` and an explicit `DEV_AUTH_BYPASS=true`.
+    pub dev_auth_bypass: bool,
     pub data_dir: String,
 }
 
@@ -32,6 +36,12 @@ impl Config {
             .to_lowercase()
             == "true";
 
+        let dev_auth_bypass = is_dev
+            && env::var("DEV_AUTH_BYPASS")
+                .unwrap_or_else(|_| "false".to_string())
+                .to_lowercase()
+                == "true";
+
         let data_dir = env::var("DATA_DIR").unwrap_or_else(|_| {
             if cfg!(target_os = "macos") {
                 "./data".to_string()
@@ -45,6 +55,7 @@ impl Config {
             firebase_project_id,
             plex_media_path,
             is_dev,
+            dev_auth_bypass,
             data_dir,
         })
     }

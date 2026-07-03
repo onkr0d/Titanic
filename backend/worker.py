@@ -6,6 +6,8 @@ from sentry_sdk.integrations.rq import RqIntegration
 from redis import Redis
 from rq import Worker, Queue
 
+from fileutils import scrub_event
+
 logging.basicConfig(
     level=logging.DEBUG if os.environ.get('IS_DEV', 'false').lower() == 'true' else logging.INFO,
     format='%(asctime)s - %(process)d - %(name)s - %(levelname)s - %(message)s'
@@ -27,11 +29,12 @@ if dsn:
         environment=os.environ.get("SENTRY_ENVIRONMENT"),
         integrations=[RqIntegration()],
         send_default_pii=True,
+        before_send=scrub_event,
         traces_sample_rate=traces_sample_rate,
     )
 
 if __name__ == "__main__":
     queues = sys.argv[1:] or ["default"]
-    conn = Redis()
+    conn = Redis(password=os.environ.get("REDIS_PASSWORD") or None)  # matches start.sh --requirepass
     worker = Worker([Queue(q, connection=conn) for q in queues], connection=conn)
     worker.work()

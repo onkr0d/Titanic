@@ -21,12 +21,24 @@ from rq import Queue
 from sentry_sdk.integrations.quart import QuartIntegration
 from werkzeug.exceptions import RequestTimeout
 
-from fileutils import remove_quietly, sanitize_path_component
+from fileutils import remove_quietly, sanitize_path_component, scrub_event
 from jobs.job import compress_video, upload_video_to_umbrel
 
 IS_DEV = os.environ.get("IS_DEV", "false").lower() == "true"
+# Disabling authentication is deliberately its OWN flag, not a side effect of
+# IS_DEV. IS_DEV toggles convenience only (debug logs, localhost CORS); flipping
+# it in a prod image must never silently drop auth. The bypass also requires
+# IS_DEV so it can't be turned on by itself in a production environment.
+DEV_AUTH_BYPASS = (
+    IS_DEV and os.environ.get("DEV_AUTH_BYPASS", "false").lower() == "true"
+)
 logging.basicConfig(level=logging.DEBUG if IS_DEV else logging.INFO)
 logger = logging.getLogger(__name__)
+if DEV_AUTH_BYPASS:
+    logger.warning(
+        "DEV_AUTH_BYPASS is ON — Firebase token and App Check verification are "
+        "DISABLED. This must never be set in production."
+    )
 app = Quart(__name__)
 origins = ["https://titanic.ivan.boston"]
 
@@ -51,6 +63,7 @@ if _sentry_dsn:
         environment=os.environ.get("SENTRY_ENVIRONMENT"),
         integrations=[QuartIntegration()],
         send_default_pii=True,
+        before_send=scrub_event,
         traces_sample_rate=_sentry_traces_sample_rate(),
     )
 
@@ -209,18 +222,19 @@ async def _teardown_upload_cleanup(_exc):
         _cleanup_upload_artifacts()
 
 
+_redis = Redis(password=os.environ.get("REDIS_PASSWORD") or None)  # matches start.sh --requirepass
 ffmpeg_queue = Queue(
-    "ffmpeg", connection=Redis(), default_timeout=86400
+    "ffmpeg", connection=_redis, default_timeout=86400
 )  # 24 hours, probably really bad :(
-umbrel_queue = Queue("umbrel", connection=Redis(), default_timeout=7200)  # 2 hours
+umbrel_queue = Queue("umbrel", connection=_redis, default_timeout=7200)  # 2 hours
 
 
 # TODO: set Firebase hosting IP to be static, so I can whitelist it in the backend??? 🤔
 def verify_firebase_token(f):
     @wraps(f)
     async def decorated_function(*args, **kwargs):
-        if IS_DEV:
-            # When in development mode, we bypass token verification and mock the user.
+        if DEV_AUTH_BYPASS:
+            # Local-only escape hatch: bypass token verification and mock the user.
             request.user = {"email": "dev@example.com", "uid": "dev-user"}
             return await f(*args, **kwargs)
 
@@ -244,8 +258,9 @@ def verify_firebase_token(f):
 
 @app.before_request
 async def verify_app_check() -> None:
-    # no AppCheck for OPTIONS requests (CORS preflight), health endpoint, or dev mode
-    if IS_DEV or request.method == "OPTIONS" or request.path == "/health":
+    # no AppCheck for OPTIONS requests (CORS preflight), health endpoint, or when
+    # the local dev auth bypass is explicitly enabled
+    if DEV_AUTH_BYPASS or request.method == "OPTIONS" or request.path == "/health":
         return
 
     app_check_token = request.headers.get("X-Firebase-AppCheck", default="")
@@ -617,4 +632,12 @@ async def docker_health_check():
 
 
 if __name__ == "__main__":
-    asyncio.run(serve(app, Config.from_toml("hypercorn.toml")))
+    hypercorn_config = Config.from_toml("hypercorn.toml")
+    # Dev/test run behind a Docker bridge with a published port, which forwards to
+    # the container's external interface — so they set HYPERCORN_BIND=0.0.0.0:5000.
+    # Prod leaves this unset and keeps the loopback bind from the toml.
+    bind_override = os.environ.get("HYPERCORN_BIND")
+    if bind_override:
+        hypercorn_config.bind = [bind_override]
+        hypercorn_config.quic_bind = [bind_override]
+    asyncio.run(serve(app, hypercorn_config))

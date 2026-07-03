@@ -22,6 +22,10 @@ services:
       - PYTHONUNBUFFERED=1
       - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/admin-sdk-cred
       - IS_DEV=${IS_DEV:-true}
+      # Local-only: explicitly disable auth for the dev stack.
+      - DEV_AUTH_BYPASS=${DEV_AUTH_BYPASS:-true}
+      # Published over the Docker bridge (6969:5000), so bind all interfaces.
+      - HYPERCORN_BIND=0.0.0.0:5000
       - UMBREL_SERVER_URL=http://umbrel:3029
       - FIREBASE_API_KEY=${FIREBASE_API_KEY}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-dev}
@@ -56,6 +60,8 @@ services:
       - SENTRY_DSN=${RUST_SENTRY_DSN}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-dev}
       - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE}
+      # Local-only: explicitly disable Firebase auth for the dev stack.
+      - DEV_AUTH_BYPASS=${DEV_AUTH_BYPASS:-true}
     volumes:
       # Mount source files for hot-reloading (cargo-watch will rebuild)
       - ./titanic/src:/app/src

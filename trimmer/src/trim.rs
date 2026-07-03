@@ -33,6 +33,76 @@ pub struct TrimRequest {
     pub end_time: f64,
     #[serde(default)]
     pub overwrite: bool,
+    /// Audio-relative stream indices to keep; None keeps all streams.
+    #[serde(default)]
+    pub tracks: Option<Vec<u32>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AudioTrack {
+    pub index: u32,
+    pub title: Option<String>,
+    pub language: Option<String>,
+    pub codec: Option<String>,
+    pub default: bool,
+}
+
+/// List audio streams via ffprobe. `index` is the audio-relative index
+/// usable in `-map 0:a:{index}`.
+pub async fn list_audio_tracks(path: &Path) -> Result<Vec<AudioTrack>, AppError> {
+    let output = Command::new("ffprobe")
+        .args([
+            "-v", "error",
+            "-select_streams", "a",
+            "-show_entries",
+            "stream=codec_name:stream_tags=title,name,language:stream_disposition=default",
+            "-of", "json",
+        ])
+        .arg(path.as_os_str())
+        .output()
+        .await
+        .map_err(|e| AppError::InternalError(format!("Failed to run ffprobe: {e}")))?;
+
+    if !output.status.success() {
+        return Err(AppError::InternalError("ffprobe failed".into()));
+    }
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|e| AppError::InternalError(format!("Failed to parse ffprobe output: {e}")))?;
+
+    let streams = parsed["streams"].as_array().cloned().unwrap_or_default();
+    Ok(streams
+        .iter()
+        .enumerate()
+        .map(|(i, s)| AudioTrack {
+            index: i as u32,
+            // mp4 muxers store the stream title under "name", mkv under "title"
+            title: s["tags"]["title"]
+                .as_str()
+                .or_else(|| s["tags"]["name"].as_str())
+                .map(str::to_string),
+            language: s["tags"]["language"].as_str().map(str::to_string),
+            codec: s["codec_name"].as_str().map(str::to_string),
+            default: s["disposition"]["default"].as_i64() == Some(1),
+        })
+        .collect())
+}
+
+/// Build `-map` args for a trim. Without an explicit selection ffmpeg keeps
+/// only one audio stream, so default to `-map 0` (everything).
+fn build_map_args(tracks: Option<&[u32]>) -> Vec<String> {
+    let Some(tracks) = tracks else {
+        return vec!["-map".into(), "0".into()];
+    };
+    let mut args = vec!["-map".into(), "0:v:0".into()];
+    for t in tracks {
+        args.push("-map".into());
+        args.push(format!("0:a:{t}"));
+    }
+    // First kept track becomes default so players pick it automatically
+    args.push("-disposition:a:0".into());
+    args.push("default".into());
+    args
 }
 
 #[derive(Debug, Serialize)]
@@ -65,6 +135,43 @@ pub async fn trim_video(
         return Err(AppError::BadRequest(
             "End time must be greater than start time".into(),
         ));
+    }
+    if req.tracks.as_ref().is_some_and(|t| t.is_empty()) {
+        return Err(AppError::BadRequest(
+            "At least one audio track must be selected".into(),
+        ));
+    }
+
+    // mp4's muxer writes stream titles from the "title" key but its demuxer
+    // exposes them as "name", so a plain -c copy remux drops them; re-apply.
+    let source_tracks = match list_audio_tracks(&source).await {
+        Ok(t) => t,
+        Err(e) if req.tracks.is_some() => return Err(e),
+        Err(_) => Vec::new(),
+    };
+    let kept_tracks: Vec<&AudioTrack> = match &req.tracks {
+        Some(selection) => {
+            let kept: Vec<&AudioTrack> = selection
+                .iter()
+                .filter_map(|&i| source_tracks.get(i as usize))
+                .collect();
+            if kept.len() != selection.len() {
+                return Err(AppError::BadRequest("Invalid audio track index".into()));
+            }
+            kept
+        }
+        None => source_tracks.iter().collect(),
+    };
+    let mut metadata_args: Vec<String> = Vec::new();
+    for (out_idx, track) in kept_tracks.iter().enumerate() {
+        if let Some(title) = &track.title {
+            metadata_args.push(format!("-metadata:s:a:{out_idx}"));
+            metadata_args.push(format!("title={title}"));
+        }
+        if let Some(lang) = &track.language {
+            metadata_args.push(format!("-metadata:s:a:{out_idx}"));
+            metadata_args.push(format!("language={lang}"));
+        }
     }
 
     // Determine output path
@@ -101,6 +208,8 @@ pub async fn trim_video(
         .arg(format!("{:.3}", req.end_time))
         .arg("-i")
         .arg(source.as_os_str())
+        .args(build_map_args(req.tracks.as_deref()))
+        .args(&metadata_args)
         .arg("-c")
         .arg("copy")
         .arg("-movflags")
@@ -216,20 +325,7 @@ pub async fn generate_thumbnail(
     video_path: &Path,
     cache_dir: &Path,
 ) -> Result<PathBuf, AppError> {
-    // Create a deterministic cache filename based on path + mtime
-    let metadata = std::fs::metadata(video_path)
-        .map_err(|e| AppError::NotFound(format!("Cannot stat video: {e}")))?;
-    let mtime = metadata
-        .modified()
-        .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-    let mtime_secs = mtime
-        .duration_since(std::time::SystemTime::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-
-    let hash_input = format!("{}:{}", video_path.to_string_lossy(), mtime_secs);
-    let hash = simple_hash(&hash_input);
-    let thumb_path = cache_dir.join(format!("{hash}.avif"));
+    let thumb_path = cache_dir.join(cache_filename(video_path, "", "avif")?);
 
     // Return cached thumbnail if it exists
     if thumb_path.exists() {
@@ -305,6 +401,83 @@ pub async fn generate_thumbnail(
     Err(AppError::InternalError(
         "FFmpeg thumbnail generation failed".into(),
     ))
+}
+
+/// Extract a single audio track to an m4a, cached in the data directory.
+/// Stream-copies when possible, falls back to AAC for codecs mp4 can't hold.
+pub async fn extract_audio_track(
+    video_path: &Path,
+    track: u32,
+    cache_dir: &Path,
+) -> Result<PathBuf, AppError> {
+    let out_path = cache_dir.join(cache_filename(video_path, &format!(":a{track}"), "m4a")?);
+
+    if out_path.exists() {
+        return Ok(out_path);
+    }
+
+    std::fs::create_dir_all(cache_dir)
+        .map_err(|e| AppError::InternalError(format!("Failed to create audio cache: {e}")))?;
+
+    // Extract to a per-call temp file and atomically rename into place, so
+    // concurrent requests for the same track never write or serve a partial file.
+    let unique = format!(
+        "{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    );
+    let tmp_path = cache_dir.join(format!(".{unique}.tmp.m4a"));
+
+    let codec_attempts: [&[&str]; 2] = [&["-c:a", "copy"], &["-c:a", "aac", "-b:a", "192k"]];
+    for codec_args in codec_attempts {
+        let status = Command::new("ffmpeg")
+            .args(["-y", "-i"])
+            .arg(video_path.as_os_str())
+            .arg("-map")
+            .arg(format!("0:a:{track}"))
+            .arg("-vn")
+            .args(codec_args)
+            .args(["-movflags", "+faststart"])
+            .arg(tmp_path.as_os_str())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true) // don't leave orphaned ffmpeg when the request is canceled
+            .status()
+            .await;
+
+        if let Ok(s) = status
+            && s.success()
+            && tmp_path.exists()
+            && std::fs::rename(&tmp_path, &out_path).is_ok()
+        {
+            info!("Extracted audio track {} from {:?}", track, video_path);
+            return Ok(out_path);
+        }
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+
+    Err(AppError::InternalError(format!(
+        "Failed to extract audio track {track}"
+    )))
+}
+
+/// Deterministic cache filename from a source file's path + mtime, plus an
+/// `extra` discriminator (e.g. an audio track index). Keyed on mtime so the
+/// entry naturally invalidates when the source file changes.
+fn cache_filename(source: &Path, extra: &str, ext: &str) -> Result<String, AppError> {
+    let metadata = std::fs::metadata(source)
+        .map_err(|e| AppError::NotFound(format!("Cannot stat file: {e}")))?;
+    let mtime_secs = metadata
+        .modified()
+        .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let hash_input = format!("{}:{}{}", source.to_string_lossy(), mtime_secs, extra);
+    Ok(format!("{}.{ext}", simple_hash(&hash_input)))
 }
 
 /// Simple hash for cache filenames (not cryptographic, just for deduplication).
@@ -398,5 +571,190 @@ mod tests {
         let b = simple_hash("test");
         assert_eq!(a, b);
         assert_ne!(a, simple_hash("other"));
+    }
+
+    #[test]
+    fn map_args_default_keeps_everything() {
+        assert_eq!(build_map_args(None), vec!["-map", "0"]);
+    }
+
+    #[test]
+    fn map_args_selected_tracks() {
+        assert_eq!(
+            build_map_args(Some(&[0, 2])),
+            vec![
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0",
+                "-map",
+                "0:a:2",
+                "-disposition:a:0",
+                "default"
+            ]
+        );
+    }
+
+    /// Create a test video with 3 stereo audio tracks (like pipeline output).
+    async fn make_multitrack_video(path: &Path) -> bool {
+        let status = tokio::process::Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-f", "lavfi", "-i", "testsrc=duration=2:size=128x72:rate=10",
+                "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+                "-f", "lavfi", "-i", "sine=frequency=880:duration=2",
+                "-f", "lavfi", "-i", "sine=frequency=1320:duration=2",
+                "-map", "0:v", "-map", "1:a", "-map", "2:a", "-map", "3:a",
+                "-c:v", "mpeg4", "-c:a", "aac",
+                "-metadata:s:a:0", "title=Default mix",
+                "-metadata:s:a:1", "title=System only (raw)",
+                "-metadata:s:a:2", "title=Mic only (raw)",
+                "-disposition:a:0", "default",
+            ])
+            .arg(path.as_os_str())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await;
+        matches!(status, Ok(s) if s.success())
+    }
+
+    fn ffmpeg_available() -> bool {
+        std::process::Command::new("ffmpeg")
+            .arg("-version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok()
+    }
+
+    #[tokio::test]
+    async fn trim_keeps_all_audio_tracks() {
+        if !ffmpeg_available() {
+            eprintln!("ffmpeg not available, skipping");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("multi.mp4");
+        assert!(make_multitrack_video(&source).await);
+
+        let req = TrimRequest {
+            path: "multi.mp4".into(),
+            start_time: 0.0,
+            end_time: 1.0,
+            overwrite: false,
+            tracks: None,
+        };
+        let res = trim_video(dir.path(), &req).await.unwrap();
+
+        let tracks = list_audio_tracks(&dir.path().join(&res.output_path))
+            .await
+            .unwrap();
+        assert_eq!(tracks.len(), 3);
+        assert_eq!(tracks[0].title.as_deref(), Some("Default mix"));
+        assert!(tracks[0].default);
+        assert_eq!(tracks[2].title.as_deref(), Some("Mic only (raw)"));
+    }
+
+    #[tokio::test]
+    async fn trim_keeps_selected_tracks_and_sets_default() {
+        if !ffmpeg_available() {
+            eprintln!("ffmpeg not available, skipping");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("multi.mp4");
+        assert!(make_multitrack_video(&source).await);
+
+        let req = TrimRequest {
+            path: "multi.mp4".into(),
+            start_time: 0.0,
+            end_time: 1.0,
+            overwrite: false,
+            tracks: Some(vec![1, 2]),
+        };
+        let res = trim_video(dir.path(), &req).await.unwrap();
+
+        let tracks = list_audio_tracks(&dir.path().join(&res.output_path))
+            .await
+            .unwrap();
+        assert_eq!(tracks.len(), 2);
+        assert_eq!(tracks[0].title.as_deref(), Some("System only (raw)"));
+        assert!(tracks[0].default);
+        assert!(!tracks[1].default);
+    }
+
+    #[tokio::test]
+    async fn extract_track_cached() {
+        if !ffmpeg_available() {
+            eprintln!("ffmpeg not available, skipping");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("multi.mp4");
+        assert!(make_multitrack_video(&source).await);
+
+        let cache = dir.path().join("audio-cache");
+        let first = extract_audio_track(&source, 1, &cache).await.unwrap();
+        assert!(first.exists());
+        let mtime = std::fs::metadata(&first).unwrap().modified().unwrap();
+
+        // Second call must hit the cache, not re-extract
+        let second = extract_audio_track(&source, 1, &cache).await.unwrap();
+        assert_eq!(first, second);
+        assert_eq!(std::fs::metadata(&second).unwrap().modified().unwrap(), mtime);
+    }
+
+    #[tokio::test]
+    async fn concurrent_extract_same_track_yields_valid_files() {
+        if !ffmpeg_available() {
+            eprintln!("ffmpeg not available, skipping");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("multi.mp4");
+        assert!(make_multitrack_video(&source).await);
+        let cache = dir.path().join("audio-cache");
+
+        // Race several extractions of the same track; atomic publish must ensure
+        // every returned path is a fully-muxed, probeable file (no partial serve).
+        let handles: Vec<_> = (0..6)
+            .map(|_| {
+                let src = source.clone();
+                let cache = cache.clone();
+                tokio::spawn(async move { extract_audio_track(&src, 1, &cache).await })
+            })
+            .collect();
+
+        for h in handles {
+            let path = h.await.unwrap().unwrap();
+            assert!(path.exists());
+            // A partial/corrupt m4a would have no probeable audio stream.
+            let tracks = list_audio_tracks(&path).await.unwrap();
+            assert_eq!(tracks.len(), 1);
+        }
+        // Only the final cache file should remain — no leftover temp files.
+        let leftovers: Vec<_> = std::fs::read_dir(&cache)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().contains(".tmp."))
+            .collect();
+        assert!(leftovers.is_empty(), "temp files left behind: {leftovers:?}");
+    }
+
+    #[tokio::test]
+    async fn empty_track_selection_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("video.mp4");
+        std::fs::write(&source, b"test").unwrap();
+
+        let req = TrimRequest {
+            path: "video.mp4".into(),
+            start_time: 0.0,
+            end_time: 1.0,
+            overwrite: false,
+            tracks: Some(vec![]),
+        };
+        assert!(trim_video(dir.path(), &req).await.is_err());
     }
 }

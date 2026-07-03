@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=2">
+    <link rel="stylesheet" href="/static/style.css?v=3">
     <!-- Prevent iOS standalone (Add to Home Screen) from aggressively caching -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -110,6 +110,16 @@
                     <div class="video-info">
                         <h2 id="videoTitle" class="video-title"></h2>
                         <p id="videoMeta" class="video-meta"></p>
+                        <div class="audio-track-row" id="audioTrackRow" style="display:none;">
+                            <span class="audio-track-label">🎧 Preview audio</span>
+                            <div class="custom-select" id="audioTrackDropdown">
+                                <button class="custom-select-trigger" type="button">
+                                    <span class="custom-select-value">Default</span>
+                                    <svg class="custom-select-chevron" viewBox="0 0 24 24" width="16" height="16"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                </button>
+                                <ul class="custom-select-menu"></ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -139,6 +149,11 @@
                                 <label for="endTimeInput">End</label>
                                 <input type="text" id="endTimeInput" class="time-input" value="0:00.000" placeholder="0:00.000">
                             </div>
+                        </div>
+
+                        <div class="track-keep" id="trackKeepSection" style="display:none;">
+                            <h4>Audio tracks to keep</h4>
+                            <div id="trackKeepList" class="track-keep-list"></div>
                         </div>
 
                         <div class="trim-actions">
@@ -188,6 +203,6 @@
         <div id="toastContainer" class="toast-container"></div>
     </div>
 
-    <script src="/static/app.js?v=2"></script>
+    <script src="/static/app.js?v=5"></script>
 </body>
 </html>

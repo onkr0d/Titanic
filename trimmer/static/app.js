@@ -12,6 +12,10 @@
     let trimStart = 0;
     let trimEnd = 0;
     let pausedAtTrimEnd = false;
+    let audioTracks = [];
+    let previewAudio = null; // synced <audio> element when previewing a non-default track
+    let previewTrackIndex = 0; // which audio track is currently being previewed
+    let audioMuted = false; // user's mute preference, persisted across track switches
 
     // ---- DOM refs ----
     const $ = (sel) => document.querySelector(sel);
@@ -37,6 +41,10 @@
     const confirmModal = $('#confirmModal');
     const confirmCancel = $('#confirmCancel');
     const confirmProceed = $('#confirmProceed');
+    const audioTrackRow = $('#audioTrackRow');
+    const audioTrackDropdown = $('#audioTrackDropdown');
+    const trackKeepSection = $('#trackKeepSection');
+    const trackKeepList = $('#trackKeepList');
 
     // Custom video controls
     const playerContainer = $('#playerContainer');
@@ -137,15 +145,28 @@
         return data.duration;
     }
 
-    async function requestTrim(path, startTime, endTime, overwrite) {
+    async function requestTrim(path, startTime, endTime, overwrite, tracks) {
+        const body = { path, startTime, endTime, overwrite };
+        if (tracks) body.tracks = tracks;
         const res = await fetch('/api/trim', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path, startTime, endTime, overwrite }),
+            body: JSON.stringify(body),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Trim failed');
         return data;
+    }
+
+    async function fetchAudioTracks(path) {
+        try {
+            const res = await fetch(`/api/tracks?path=${encodeURIComponent(path)}`);
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data.tracks || [];
+        } catch {
+            return [];
+        }
     }
 
     // ---- Rendering ----
@@ -251,17 +272,130 @@
 
         videoMeta.textContent = `${formatSize(video.size)} · ${video.folder || 'Clips'}`;
         overwriteToggle.checked = false;
+
+        clearPreviewAudio();
+        audioTracks = await fetchAudioTracks(video.path);
+        renderAudioTrackUi();
     }
 
     function closeEditor() {
         editorView.style.display = 'none';
         libraryView.style.display = '';
         backBtn.style.display = 'none';
+        clearPreviewAudio();
         videoPlayer.pause();
         videoPlayer.src = '';
         currentVideo = null;
         // Reload in case new files were created
         loadVideos();
+    }
+
+    // ---- Audio tracks ----
+    function trackShortLabel(track, i) {
+        // "Default mix (system + mic, EBU R128)" -> "Default mix"
+        if (track.title) return track.title.split('(')[0].trim();
+        return `Track ${i + 1}`;
+    }
+
+    function renderAudioTrackUi() {
+        const multi = audioTracks.length > 1;
+        audioTrackRow.style.display = multi ? '' : 'none';
+        trackKeepSection.style.display = multi ? '' : 'none';
+        if (!multi) return;
+
+        const menu = audioTrackDropdown.querySelector('.custom-select-menu');
+        menu.innerHTML = '';
+        audioTracks.forEach((t, i) => {
+            const opt = document.createElement('li');
+            opt.className = 'custom-select-option' + (i === 0 ? ' selected' : '');
+            opt.dataset.value = String(i);
+            opt.textContent = trackShortLabel(t, i);
+            if (t.title) opt.title = t.title;
+            menu.appendChild(opt);
+        });
+        audioTrackDropdown.querySelector('.custom-select-value').textContent =
+            trackShortLabel(audioTracks[0], 0);
+
+        trackKeepList.innerHTML = '';
+        audioTracks.forEach((t, i) => {
+            const label = document.createElement('label');
+            label.className = 'track-keep-item';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = true;
+            cb.dataset.track = String(i);
+            const text = document.createElement('span');
+            text.textContent = t.title || trackShortLabel(t, i);
+            label.appendChild(cb);
+            label.appendChild(text);
+            trackKeepList.appendChild(label);
+        });
+    }
+
+    // The element currently producing sound: the video itself (default track)
+    // or the synced <audio> element (alternate track).
+    function audioSink() {
+        return previewAudio || videoPlayer;
+    }
+
+    function clearPreviewAudio() {
+        if (previewAudio) {
+            previewAudio.pause();
+            previewAudio.removeAttribute('src');
+            previewAudio = null;
+        }
+        previewTrackIndex = 0;
+        videoPlayer.volume = parseFloat(volumeSlider.value);
+        videoPlayer.muted = audioMuted;
+        syncMuteIcon();
+    }
+
+    function setPreviewTrack(index) {
+        if (index === previewTrackIndex) return; // already previewing this track
+        clearPreviewAudio();
+        if (index === 0 || !currentVideo) return;
+        previewTrackIndex = index;
+
+        previewAudio = new Audio(
+            `/api/audio?path=${encodeURIComponent(currentVideo.path)}&track=${index}`
+        );
+        previewAudio.preload = 'auto';
+        previewAudio.volume = parseFloat(volumeSlider.value);
+        previewAudio.muted = audioMuted; // carry the user's mute onto the new sink
+        // If extraction fails, fall back to the video's own audio instead of
+        // leaving playback silent with the video muted.
+        previewAudio.addEventListener('error', () => onPreviewAudioError(index));
+        videoPlayer.muted = true; // alternate track plays via previewAudio, not the video
+
+        // Seek to the video's position only once the audio can honor it; setting
+        // currentTime on a not-yet-loaded element is dropped and would start at 0.
+        const syncWhenReady = () => {
+            if (previewTrackIndex !== index || !previewAudio) return;
+            previewAudio.currentTime = videoPlayer.currentTime;
+            if (!videoPlayer.paused) playPreview(index);
+        };
+        if (previewAudio.readyState >= 1) syncWhenReady();
+        else previewAudio.addEventListener('loadedmetadata', syncWhenReady, { once: true });
+
+        syncMuteIcon();
+    }
+
+    function playPreview(index) {
+        if (!previewAudio) return;
+        previewAudio.play().catch((e) => {
+            // Ignore autoplay-policy rejections; surface real failures.
+            if (e && e.name !== 'NotAllowedError' && e.name !== 'AbortError') {
+                onPreviewAudioError(index);
+            }
+        });
+    }
+
+    function onPreviewAudioError(index) {
+        // Guard against stale handlers firing after the user moved on.
+        if (previewTrackIndex !== index) return;
+        clearPreviewAudio();
+        setDropdownValue(audioTrackDropdown, '0');
+        showToast('Could not load that audio track; playing default mix', 'error');
     }
 
     // ---- Timeline / Sliders ----
@@ -316,6 +450,12 @@
             pausedAtTrimEnd = true;
             videoPlayer.pause();
         }
+
+        // Correct alternate-track drift
+        if (previewAudio && !videoPlayer.paused
+            && Math.abs(previewAudio.currentTime - videoPlayer.currentTime) > 0.2) {
+            previewAudio.currentTime = videoPlayer.currentTime;
+        }
     }
 
     function updateBuffered() {
@@ -339,7 +479,8 @@
     function syncMuteIcon() {
         const onIcon = muteBtn.querySelector('.vol-on-icon');
         const offIcon = muteBtn.querySelector('.vol-off-icon');
-        if (videoPlayer.muted || videoPlayer.volume === 0) {
+        const sink = audioSink();
+        if (sink.muted || sink.volume === 0) {
             onIcon.style.display = 'none';
             offIcon.style.display = '';
         } else {
@@ -374,6 +515,7 @@
         searchInput.addEventListener('input', renderLibrary);
         initDropdown(folderDropdown, () => loadVideos());
         initDropdown(sortDropdown, () => loadVideos());
+        initDropdown(audioTrackDropdown, (v) => setPreviewTrack(parseInt(v, 10)));
 
         // ---- Custom video controls ----
         // Play/pause button
@@ -416,20 +558,51 @@
         });
 
         document.addEventListener('mouseup', () => {
+            if (!isSeeking) return;
             isSeeking = false;
+            // Resync the alternate audio once at the drop point, not on every
+            // intermediate seek during the drag.
+            if (previewAudio) previewAudio.currentTime = videoPlayer.currentTime;
         });
 
-        // Volume
+        // Volume (applies to whichever element is producing sound)
         volumeSlider.addEventListener('input', () => {
-            videoPlayer.volume = parseFloat(volumeSlider.value);
-            videoPlayer.muted = false;
+            const sink = audioSink();
+            sink.volume = parseFloat(volumeSlider.value);
+            audioMuted = false;
+            sink.muted = false;
             syncMuteIcon();
         });
 
         muteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            videoPlayer.muted = !videoPlayer.muted;
+            audioMuted = !audioMuted;
+            audioSink().muted = audioMuted;
             syncMuteIcon();
+        });
+
+        // Keep alternate audio track in lockstep with the video
+        videoPlayer.addEventListener('play', () => {
+            if (!previewAudio) return;
+            previewAudio.currentTime = videoPlayer.currentTime;
+            previewAudio.play().catch(() => {});
+        });
+        videoPlayer.addEventListener('pause', () => {
+            if (previewAudio) previewAudio.pause();
+        });
+        videoPlayer.addEventListener('seeked', () => {
+            // Skip during an active scrub-drag; mouseup does the single resync.
+            if (previewAudio && !isSeeking) previewAudio.currentTime = videoPlayer.currentTime;
+        });
+        // The video freezes while buffering without firing 'pause', so hold the
+        // audio during a stall and resync when playback actually resumes.
+        videoPlayer.addEventListener('waiting', () => {
+            if (previewAudio) previewAudio.pause();
+        });
+        videoPlayer.addEventListener('playing', () => {
+            if (!previewAudio || videoPlayer.paused) return;
+            previewAudio.currentTime = videoPlayer.currentTime;
+            previewAudio.play().catch(() => {});
         });
 
         // Fullscreen
@@ -585,7 +758,21 @@
         executeTrim(false);
     }
 
+    function selectedTracks() {
+        // null = keep everything (server default); array = explicit selection
+        if (audioTracks.length <= 1) return null;
+        const checked = [...trackKeepList.querySelectorAll('input:checked')]
+            .map((cb) => parseInt(cb.dataset.track, 10));
+        return checked.length === audioTracks.length ? null : checked;
+    }
+
     async function executeTrim(overwrite) {
+        const tracks = selectedTracks();
+        if (tracks && tracks.length === 0) {
+            showToast('Select at least one audio track to keep', 'error');
+            return;
+        }
+
         trimBtn.disabled = true;
         trimBtn.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px;margin:0"></span> Trimming...';
 
@@ -594,7 +781,8 @@
                 currentVideo.path,
                 trimStart,
                 trimEnd,
-                overwrite
+                overwrite,
+                tracks
             );
             showToast(result.message, 'success');
         } catch (err) {

@@ -174,11 +174,16 @@ const VALID_VIDEO_EXTENSIONS: &[&str] = &[
     "mp4", "avi", "mov", "mkv", "wmv", "flv", "m4v", "webm", "ts",
 ];
 
+/// Max concurrent on-demand audio extractions to keep CPU load bounded.
+pub const AUDIO_EXTRACT_CONCURRENCY: usize = 2;
+
 pub struct AppState {
     pub media_path: PathBuf,
     pub data_dir: PathBuf,
     /// In-memory cache: relative_path -> (mtime_secs, duration_secs)
     pub duration_cache: RwLock<HashMap<String, (i64, f64)>>,
+    /// Bounds concurrent /api/audio ffmpeg extractions.
+    pub audio_extract_semaphore: Semaphore,
 }
 
 #[derive(Debug, Serialize)]
@@ -209,6 +214,17 @@ pub struct PathQuery {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct AudioQuery {
+    path: String,
+    track: u32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TracksResponse {
+    tracks: Vec<trim::AudioTrack>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct VideosQuery {
     #[serde(default)]
     sort: Option<String>,
@@ -229,6 +245,8 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .route("/health", get(health_check))
         .route("/api/videos", get(list_videos))
         .route("/api/video", get(serve_video))
+        .route("/api/tracks", get(list_tracks))
+        .route("/api/audio", get(serve_audio))
         .route("/api/thumbnail", get(serve_thumbnail))
         .route("/api/trim", post(handle_trim))
         .route("/api/duration", get(get_duration))
@@ -379,6 +397,45 @@ async fn serve_video(
     }
 
     Ok(ServeFile::new(&video_path)
+        .oneshot(request)
+        .await
+        .into_response())
+}
+
+async fn list_tracks(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<PathQuery>,
+) -> Result<Json<TracksResponse>, AppError> {
+    let video_path = trim::ensure_path_within(&state.media_path, Path::new(&params.path))?;
+
+    if !video_path.exists() {
+        return Err(AppError::NotFound("Video not found".into()));
+    }
+
+    let tracks = trim::list_audio_tracks(&video_path).await?;
+    Ok(Json(TracksResponse { tracks }))
+}
+
+async fn serve_audio(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<AudioQuery>,
+    request: axum::extract::Request,
+) -> Result<Response, AppError> {
+    let video_path = trim::ensure_path_within(&state.media_path, Path::new(&params.path))?;
+
+    if !video_path.exists() {
+        return Err(AppError::NotFound("Video not found".into()));
+    }
+
+    let audio_dir = state.data_dir.join("audio");
+    let _permit = state
+        .audio_extract_semaphore
+        .acquire()
+        .await
+        .map_err(|e| AppError::InternalError(format!("Semaphore closed: {e}")))?;
+    let audio_path = trim::extract_audio_track(&video_path, params.track, &audio_dir).await?;
+
+    Ok(ServeFile::new(&audio_path)
         .oneshot(request)
         .await
         .into_response())

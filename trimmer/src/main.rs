@@ -53,6 +53,9 @@ async fn main() -> Result<()> {
         media_path,
         data_dir,
         duration_cache: RwLock::new(HashMap::new()),
+        audio_extract_semaphore: tokio::sync::Semaphore::new(
+            trimmer::AUDIO_EXTRACT_CONCURRENCY,
+        ),
     });
 
     // Build router

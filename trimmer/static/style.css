@@ -1070,3 +1070,53 @@ body {
         flex-wrap: wrap;
     }
 }
+
+/* ---------- Audio Tracks ---------- */
+.audio-track-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.audio-track-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.track-keep {
+    margin-bottom: 20px;
+}
+
+.track-keep h4 {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 10px;
+}
+
+.track-keep-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.track-keep-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.track-keep-item input {
+    accent-color: var(--accent);
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}

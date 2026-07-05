@@ -416,20 +416,25 @@ def _mint_refresh_token(user):
     return resp.json()["refreshToken"]  # response also has idToken, expiresIn
 
 
-def _enqueue_processing(filepath, job_meta, should_compress):
+def _enqueue_processing(filepath, job_meta, should_compress, target_size_mb=None):
     """Enqueue the upload-to-Umbrel job, optionally behind an ffmpeg compress job.
 
     The enqueue pair is the commit point. If the umbrel enqueue fails after the
     ffmpeg job is already queued, best-effort cancel the ffmpeg job so it can't
     later run against a file the caller's error path is about to delete (the race
     flagged in PR #235's review).
+
+    When target_size_mb is set, the compress job also emits a size-capped
+    "shareable" copy alongside the full-quality one, and both get uploaded.
     """
     if not should_compress:
         # If compression is disabled, just upload the original file
         umbrel_queue.enqueue(upload_video_to_umbrel, args=[filepath], meta=job_meta)
         return
 
-    ffmpeg_job = ffmpeg_queue.enqueue(compress_video, args=[filepath], result_ttl=86400)
+    ffmpeg_job = ffmpeg_queue.enqueue(
+        compress_video, args=[filepath, target_size_mb], result_ttl=86400
+    )
     try:
         umbrel_queue.enqueue(
             upload_video_to_umbrel, depends_on=ffmpeg_job, meta=job_meta
@@ -471,6 +476,20 @@ async def upload_video():
         files = await request.files
 
         should_compress = form.get("shouldCompress", "true").lower() == "true"
+
+        # Optional target size (MB) for an extra Discord-shareable copy. Size-targeting
+        # implies a re-encode, so it forces compression on regardless of the toggle.
+        target_size_mb = None
+        target_raw = form.get("targetSizeMb", "").strip()
+        if target_raw:
+            try:
+                target_size_mb = float(target_raw)
+            except ValueError:
+                raise UploadError(400, "Invalid target size")
+            if not (0 < target_size_mb <= 2000):
+                raise UploadError(400, "Target size must be between 0 and 2000 MB")
+            should_compress = True
+
         folder = form.get("folder", "").strip() or None
         # Fail fast: reject a bad folder name here (before the expensive compress
         # job) rather than letting it fail at the umbrel step post-processing.
@@ -503,7 +522,7 @@ async def upload_video():
 
         # Commit point: rename the .part into place, then enqueue the job pair.
         filepath = _claim_upload_path(file)
-        _enqueue_processing(filepath, job_meta, should_compress)
+        _enqueue_processing(filepath, job_meta, should_compress, target_size_mb)
 
         # Job successfully enqueued — handler owns the file no longer; don't clean up.
         g._upload_final_path = None

@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, X, Check, Clapperboard, Folder } from 'lucide-react';
+import { UploadCloud, X, Check, Clapperboard, Folder, Minimize2 } from 'lucide-react';
 import { showToast } from '../utils/toast';
 import { uploadVideo, getFolders, getAppConfig } from '../utils/api';
 import Tooltip from './Tooltip';
 import { Switch } from './animate-ui/base/switch';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './animate-ui/components/radix/dropdown-menu';
 import { FolderOpen } from 'lucide-react';
+import { DISCORD_TIERS, VERDICT_COPY, predictQuality, probeVideoMeta, type VideoMeta } from '../utils/shareable';
 
 interface FileState {
     file: File;
@@ -15,6 +16,8 @@ interface FileState {
     shouldCompress: boolean;
     folder?: string;
     progress?: number;
+    targetSizeMb?: number;   // undefined = no shareable copy
+    meta?: VideoMeta;        // probed locally for the quality prediction
 }
 
 const FileUploader = () => {
@@ -23,6 +26,7 @@ const FileUploader = () => {
     const [availableFolders, setAvailableFolders] = useState<string[]>([]);
     const [defaultFolder, setDefaultFolder] = useState<string>("Clips");
     const [shiftPressed, setShiftPressed] = useState(false);
+    const [customSizeId, setCustomSizeId] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Fetch available folders and config on component mount
@@ -95,14 +99,26 @@ const FileUploader = () => {
         if (validFiles.length !== newFiles.length) {
             showToast.error('Some files were skipped because they are not valid video files');
         }
-        setFiles(prev => [...prev, ...validFiles.map(file => ({
+        const entries = validFiles.map(file => ({
             file,
             id: Math.random().toString(36).substring(2, 11),
             status: 'ready' as const,
             shouldCompress: true, // Default to true for compression
             folder: defaultFolder, // Configured default folder
-            progress: undefined
-        }))]);
+            progress: undefined,
+        }));
+        setFiles(prev => [...prev, ...entries]);
+        // Probe duration/resolution locally so the size dropdown can predict quality
+        // without a server round-trip.
+        entries.forEach(({ file, id }) => {
+            probeVideoMeta(file).then(meta => {
+                if (meta) setFiles(prev => prev.map(f => (f.id === id ? { ...f, meta } : f)));
+            });
+        });
+    };
+
+    const setFileTargetSize = (fileId: string, targetSizeMb: number | undefined) => {
+        setFiles(prev => prev.map(f => (f.id === fileId ? { ...f, targetSizeMb } : f)));
     };
 
     const removeFile = (fileId: string) => {
@@ -111,7 +127,11 @@ const FileUploader = () => {
 
     const toggleCompression = (fileId: string) => {
         setFiles(prev => prev.map(f =>
-            f.id === fileId ? { ...f, shouldCompress: !f.shouldCompress } : f
+            f.id === fileId
+                // Turning compression off drops any size cap too — a shareable copy
+                // requires a re-encode, so a stale target must not survive the toggle.
+                ? { ...f, shouldCompress: !f.shouldCompress, targetSizeMb: f.shouldCompress ? undefined : f.targetSizeMb }
+                : f
         ));
     };
 
@@ -142,12 +162,12 @@ const FileUploader = () => {
 
         try {
             // Upload all files in parallel
-            const uploadPromises = readyFiles.map(async ({ file, id, shouldCompress, folder }) => {
+            const uploadPromises = readyFiles.map(async ({ file, id, shouldCompress, folder, targetSizeMb }) => {
                 const result = await uploadVideo(file, shouldCompress, folder, (progress) => {
                     setFiles(prev => prev.map(f =>
                         f.id === id ? { ...f, progress: progress.progress } : f
                     ));
-                });
+                }, targetSizeMb);
 
                 if (result.success) {
                     // Update file status to uploaded
@@ -213,7 +233,7 @@ const FileUploader = () => {
             {files.length > 0 && (
                 <div className="mt-6">
                     <div className="space-y-3">
-                        {files.map(({ file, id, status, error, shouldCompress, folder, progress }) => (
+                        {files.map(({ file, id, status, error, shouldCompress, folder, progress, targetSizeMb, meta }) => (
                             <div
                                 key={id}
                                 className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
@@ -292,6 +312,88 @@ const FileUploader = () => {
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
                                             </Tooltip>
+                                            {shouldCompress && (customSizeId === id ? (
+                                                <input
+                                                    type="number"
+                                                    min={1}
+                                                    autoFocus
+                                                    defaultValue={targetSizeMb ?? ''}
+                                                    placeholder="MB"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    onKeyDown={(e) => {
+                                                        e.stopPropagation();
+                                                        if (e.key === 'Enter') {
+                                                            const v = parseFloat((e.target as HTMLInputElement).value);
+                                                            setFileTargetSize(id, v > 0 ? v : undefined);
+                                                            setCustomSizeId(null);
+                                                        } else if (e.key === 'Escape') {
+                                                            setCustomSizeId(null);
+                                                        }
+                                                    }}
+                                                    onBlur={(e) => {
+                                                        const v = parseFloat(e.target.value);
+                                                        setFileTargetSize(id, v > 0 ? v : undefined);
+                                                        setCustomSizeId(null);
+                                                    }}
+                                                    className="text-xs w-16 bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            ) : (
+                                                <Tooltip
+                                                    content={
+                                                        targetSizeMb
+                                                            ? `Shareable copy capped at ${targetSizeMb}MB — ${VERDICT_COPY[predictQuality(targetSizeMb, meta)].text}`
+                                                            : "Also make a size-capped copy to share (e.g. Discord)"
+                                                    }
+                                                >
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <button
+                                                                className="text-xs bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-1"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                {targetSizeMb ? (
+                                                                    <>
+                                                                        <span className={`w-2 h-2 rounded-full ${VERDICT_COPY[predictQuality(targetSizeMb, meta)].dot}`} />
+                                                                        {targetSizeMb} MB
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <Minimize2 className="w-3 h-3" />
+                                                                        Full
+                                                                    </>
+                                                                )}
+                                                            </button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="start" className="w-48">
+                                                            <DropdownMenuItem
+                                                                onClick={() => setFileTargetSize(id, undefined)}
+                                                                className={!targetSizeMb ? "bg-accent" : ""}
+                                                            >
+                                                                Full quality (no cap)
+                                                            </DropdownMenuItem>
+                                                            {DISCORD_TIERS.map(tier => {
+                                                                const verdict = predictQuality(tier.mb, meta);
+                                                                return (
+                                                                    <DropdownMenuItem
+                                                                        key={tier.mb}
+                                                                        onClick={() => setFileTargetSize(id, tier.mb)}
+                                                                        className={`flex items-center justify-between ${targetSizeMb === tier.mb ? "bg-accent" : ""}`}
+                                                                    >
+                                                                        <span className="flex items-center gap-2">
+                                                                            <span className={`w-2 h-2 rounded-full ${VERDICT_COPY[verdict].dot}`} />
+                                                                            {tier.label}
+                                                                        </span>
+                                                                        <span className="text-[10px] opacity-60">{tier.note}</span>
+                                                                    </DropdownMenuItem>
+                                                                );
+                                                            })}
+                                                            <DropdownMenuItem onClick={() => setCustomSizeId(id)}>
+                                                                Custom…
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </Tooltip>
+                                            ))}
                                             <Tooltip
                                                 content={
                                                     shouldCompress

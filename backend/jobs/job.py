@@ -479,7 +479,7 @@ def compress_video(input_file: str, target_size_mb: float | None = None):
     source_file = audio_processed_file if audio_processed_file else input_file
 
     if is_h265_video(source_file):
-        logger.info("Video is already H.265, skipping video compression")
+        logger.info("Video is already H.265, skipping full-quality re-encode")
         if source_file != output_file:
             shutil.move(source_file, output_file)
         try:
@@ -487,13 +487,14 @@ def compress_video(input_file: str, target_size_mb: float | None = None):
                 os.remove(input_file)
         except FileNotFoundError:
             pass
+        # A size target still re-encodes, so log "complete" only after the shareable copy.
+        shareable = (
+            build_shareable_copy(output_file, target_size_mb, os.path.dirname(output_file))
+            if target_size_mb
+            else None
+        )
         logger.info(f"Video processing complete: {filename}")
-        if target_size_mb:
-            shareable = build_shareable_copy(
-                output_file, target_size_mb, os.path.dirname(output_file)
-            )
-            return [output_file, shareable]
-        return output_file
+        return [output_file, shareable] if shareable else output_file
 
     shareable_file = None
     try:
@@ -548,7 +549,6 @@ def compress_video(input_file: str, target_size_mb: float | None = None):
             logger.debug("FFmpeg (HEVC transcode): %s", " ".join(cmd))
             subprocess.run(cmd, capture_output=True, text=True, check=True)
             logger.debug(f"Video compression completed: {output_file}")
-            logger.info(f"Video processing complete: {filename}")
 
         except subprocess.CalledProcessError as e:
             logger.error("Video compression failed: %s", e)
@@ -572,6 +572,7 @@ def compress_video(input_file: str, target_size_mb: float | None = None):
             shareable_file = build_shareable_copy(
                 source_file, target_size_mb, os.path.dirname(output_file)
             )
+        logger.info(f"Video processing complete: {filename}")
     except Exception:
         # Primary and fallback transcode both failed — drop the partial/corrupt
         # output so it doesn't pile up in compressed/, then re-raise to fail the job.

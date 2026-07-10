@@ -268,7 +268,7 @@ const FileUploader = () => {
                                     ) : status === 'uploading' ? (
                                         <div className="w-5 h-5 border-2 border-t-blue-500 rounded-full animate-spin" />
                                     ) : (
-                                        <div className="flex items-center">
+                                        <div className="flex items-center gap-2">
                                             <Tooltip content="Select destination folder (hold Shift to apply to all files)">
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild>

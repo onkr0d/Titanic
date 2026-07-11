@@ -32,6 +32,19 @@ logger = logging.getLogger(__name__)
 # force pool for multicore util
 _X265_PARAMS = f"pools={os.cpu_count() or 1}"
 
+# Size-targeted "shareable" copies re-encode audio to a fixed AAC bitrate so the
+# byte budget is predictable (the main pipeline stream-copies audio, which isn't).
+# Public: served to the frontend via /api/config so its quality prediction stays
+# in sync with the actual encode budget.
+SHAREABLE_AUDIO_KBPS = 128
+# Leave headroom under the requested size for container/muxing overhead so the
+# result actually lands under a hard limit (e.g. Discord) rather than just near it.
+SHAREABLE_SIZE_MARGIN = 0.95
+# Floor the video bitrate so an absurdly small target still produces a valid file
+# instead of failing the encode; the UI already warns when quality will be rough.
+SHAREABLE_MIN_VIDEO_KBPS = 60
+SHAREABLE_MAX_TARGET_MB = 2000
+
 
 def initialize_firebase():
     """
@@ -108,6 +121,96 @@ def get_video_codec(input_file: str) -> str:
         return None
     except Exception as e:
         logger.error(f"Unexpected error getting codec for {input_file}: {e}")
+        return None
+
+
+def get_video_duration(input_file: str) -> float | None:
+    """
+    Get a video's duration in seconds via ffprobe. Returns None if it can't be
+    determined (needed to turn a target file size into a bitrate budget).
+    """
+    try:
+        duration = float(ffmpeg.probe(input_file)["format"]["duration"])
+        return duration if duration > 0 else None
+    except (ffmpeg.Error, ValueError, KeyError) as e:
+        logger.error(f"Failed to probe duration for {input_file}: {e}")
+        return None
+
+
+def build_shareable_copy(source_file: str, target_size_mb: float, dest_dir: str) -> str:
+    """
+    Two-pass HEVC encode of source_file sized to land under target_size_mb, written
+    into dest_dir as "<stem>_<N>MB.<ext>". This is a *separate* shareable artifact
+    (e.g. to drop in Discord); the full-quality copy is produced independently.
+
+    Bitrate budget: total_kbps = target_bits / duration, minus the fixed AAC audio
+    track, times a safety margin for container overhead so it clears a hard cap.
+    """
+    duration = get_video_duration(source_file)
+    if not duration:
+        raise ValueError(f"Cannot size-target {source_file}: unknown duration")
+
+    stem, ext = os.path.splitext(os.path.basename(source_file))
+    # Normalize any int-valued target so filenames read "10MB" not "10.0MB".
+    label = int(target_size_mb) if float(target_size_mb).is_integer() else target_size_mb
+    dest_file = os.path.join(dest_dir, f"{stem}_{label}MB{ext or '.mp4'}")
+
+    total_kbps = (target_size_mb * 8 * 1024) / duration
+    video_kbps = int(total_kbps * SHAREABLE_SIZE_MARGIN) - SHAREABLE_AUDIO_KBPS
+    if video_kbps < SHAREABLE_MIN_VIDEO_KBPS:
+        logger.warning(
+            "Target %sMB over %.0fs leaves only %dkbps for video; flooring to %dkbps "
+            "(result may exceed target and look rough).",
+            target_size_mb, duration, video_kbps, SHAREABLE_MIN_VIDEO_KBPS,
+        )
+        video_kbps = SHAREABLE_MIN_VIDEO_KBPS
+
+    # Per-encode stats file so concurrent workers don't clobber each other's pass log.
+    stats_file = os.path.join(dest_dir, f".{stem}_{os.getpid()}_x265.log")
+    common = [
+        "ffmpeg", "-y", "-i", source_file,
+        "-c:v", "libx265", "-b:v", f"{video_kbps}k", "-preset", "medium",
+    ]
+    try:
+        subprocess.run(
+            common
+            + [
+                "-x265-params", f"pass=1:stats={stats_file}:{_X265_PARAMS}",
+                "-an", "-f", "null", os.devnull,
+            ],
+            capture_output=True, text=True, check=True,
+        )
+        subprocess.run(
+            common
+            + [
+                "-x265-params", f"pass=2:stats={stats_file}:{_X265_PARAMS}",
+                "-tag:v", "hvc1",
+                "-c:a", "aac", "-b:a", f"{SHAREABLE_AUDIO_KBPS}k",
+                "-movflags", "+faststart", "-map_metadata", "0", dest_file,
+            ],
+            capture_output=True, text=True, check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        logger.error("Shareable encode failed: %s", e)
+        logger.error("FFmpeg stderr: %s", e.stderr)
+        # Drop the partial pass-2 output; nobody else knows this path exists yet.
+        remove_quietly(dest_file)
+        raise
+    finally:
+        # x265 writes "<stats>" and "<stats>.cutree"/".mbtree"; sweep them all.
+        for suffix in ("", ".cutree", ".mbtree", ".temp"):
+            remove_quietly(stats_file + suffix)
+
+    logger.info("Built shareable copy (~%sMB target): %s", target_size_mb, dest_file)
+    return dest_file
+
+
+def _build_shareable_quietly(source_file, target_size_mb, dest_dir):
+    """Best-effort: the shareable copy is optional; never fail the job over it."""
+    try:
+        return build_shareable_copy(source_file, target_size_mb, dest_dir)
+    except Exception:
+        logger.exception("Shareable copy failed; delivering full-quality only")
         return None
 
 
@@ -368,7 +471,7 @@ def is_h265_video(input_file: str) -> bool:
     return False
 
 
-def compress_video(input_file: str) -> str:
+def compress_video(input_file: str, target_size_mb: float | None = None) -> list[str]:
     filename = os.path.basename(input_file)
     output_file = os.path.join(
         os.path.dirname(os.path.dirname(input_file)), "compressed", filename
@@ -383,7 +486,7 @@ def compress_video(input_file: str) -> str:
     source_file = audio_processed_file if audio_processed_file else input_file
 
     if is_h265_video(source_file):
-        logger.info("Video is already H.265, skipping video compression")
+        logger.info("Video is already H.265, skipping full-quality re-encode")
         if source_file != output_file:
             shutil.move(source_file, output_file)
         try:
@@ -391,8 +494,14 @@ def compress_video(input_file: str) -> str:
                 os.remove(input_file)
         except FileNotFoundError:
             pass
+        # A size target still re-encodes, so log "complete" only after the shareable copy.
+        shareable = (
+            _build_shareable_quietly(output_file, target_size_mb, os.path.dirname(output_file))
+            if target_size_mb
+            else None
+        )
         logger.info(f"Video processing complete: {filename}")
-        return output_file
+        return [output_file, shareable] if shareable else [output_file]
 
     try:
         try:
@@ -446,7 +555,6 @@ def compress_video(input_file: str) -> str:
             logger.debug("FFmpeg (HEVC transcode): %s", " ".join(cmd))
             subprocess.run(cmd, capture_output=True, text=True, check=True)
             logger.debug(f"Video compression completed: {output_file}")
-            logger.info(f"Video processing complete: {filename}")
 
         except subprocess.CalledProcessError as e:
             logger.error("Video compression failed: %s", e)
@@ -463,6 +571,7 @@ def compress_video(input_file: str) -> str:
                 movflags="+faststart",
                 map_metadata=0,
             ).run()
+
     except Exception:
         # Primary and fallback transcode both failed — drop the partial/corrupt
         # output so it doesn't pile up in compressed/, then re-raise to fail the job.
@@ -472,6 +581,14 @@ def compress_video(input_file: str) -> str:
         remove_quietly(output_file)
         raise
     else:
+        # Full-quality output is safe; the shareable copy is best-effort from the
+        # same source (best quality) and must never take the finished encode down.
+        shareable_file = (
+            _build_shareable_quietly(source_file, target_size_mb, os.path.dirname(output_file))
+            if target_size_mb
+            else None
+        )
+        logger.info(f"Video processing complete: {filename}")
         # Success — the compressed output is in place, so the original upload is no
         # longer needed. Remove it so orphaned files can't accumulate and fill the disk.
         remove_quietly(input_file)
@@ -481,7 +598,7 @@ def compress_video(input_file: str) -> str:
         if audio_processed_file and source_file != input_file:
             remove_quietly(source_file)
 
-    return output_file
+    return [output_file, shareable_file] if shareable_file else [output_file]
 
 
 def retry_with_exponential_backoff(
@@ -663,37 +780,45 @@ def upload_video_to_umbrel(input_file=None):
     job = rq.get_current_job()
 
     # Try to get file from dependency job first, otherwise use the input parameter
-    compressed_file = None
+    result = None
     try:
         if job.dependency:
-            compressed_file = job.dependency.return_value(
+            result = job.dependency.return_value(
                 True
             )  # Get the result from the ffmpeg job
-            logger.debug(f"Got file from dependency job: {compressed_file}")
+            logger.debug(f"Got file(s) from dependency job: {result}")
     except Exception:
         logger.warning(
             "Dependency job no longer exists in Redis, falling back to input_file"
         )
 
-    if not compressed_file and input_file:
-        compressed_file = input_file
-        logger.debug(f"Using input file directly: {compressed_file}")
-    elif not compressed_file:
+    if not result and input_file:
+        result = input_file
+        logger.debug(f"Using input file directly: {result}")
+    elif not result:
         logger.error("No file provided - neither from dependency nor input parameter")
         raise ValueError("No file provided for upload")
 
-    logger.debug(f"Starting upload to Umbrel for file: {compressed_file}")
+    # compress_video returns [full_quality] or [full_quality, shareable]; the
+    # full-quality copy is first so it lands even if the shareable one later fails.
+    # A bare str is back-compat: the input_file fallback above, or results from
+    # jobs enqueued before the list return shape.
+    files = [result] if isinstance(result, str) else result
 
-    if not os.path.exists(compressed_file):
-        logger.error(f"File not found: {compressed_file}")
-        raise FileNotFoundError(f"File not found: {compressed_file}")
+    for f in files:
+        if not os.path.exists(f):
+            logger.error(f"File not found: {f}")
+            raise FileNotFoundError(f"File not found: {f}")
 
     try:
-        _send_video_to_umbrel(compressed_file, job)
+        for f in files:
+            logger.debug(f"Starting upload to Umbrel for file: {f}")
+            _send_video_to_umbrel(f, job)
     finally:
-        # Always drop the local artifact once we're done with it: delivered on
-        # success, abandoned on permanently-failed retries. Either way, leaving it
+        # Always drop the local artifacts once we're done with them: delivered on
+        # success, abandoned on permanently-failed retries. Either way, leaving them
         # behind leaks disk in videos/compressed and eventually triggers ENOSPC on
         # the next upload. The finally runs after all retries are exhausted, not
-        # between them, so a retry never deletes the file it's about to re-send.
-        remove_quietly(compressed_file)
+        # between them, so a retry never deletes a file it's about to re-send.
+        for f in files:
+            remove_quietly(f)

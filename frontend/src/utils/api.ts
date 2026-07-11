@@ -2,6 +2,7 @@ import { getAuth } from 'firebase/auth';
 import axios from 'axios';
 import { getToken } from "firebase/app-check";
 import { appCheck } from '../App';
+import type { ShareableConfig } from './shareable';
 
 // if in dev, use the emulator
 const API_BASE_URL = (import.meta.env.DEV ? 'http://localhost:6969' : 'https://compress.ivan.boston') + '/api';
@@ -27,6 +28,7 @@ export interface FoldersResponse {
 
 export interface AppConfig {
     default_folder: string | null;
+    shareable?: ShareableConfig;
 }
 
 export interface UploadProgress {
@@ -122,13 +124,18 @@ export const uploadVideo = async (
     file: File,
     shouldCompress: boolean = true,
     folder?: string,
-    onProgress?: (progress: UploadProgress) => void
+    onProgress?: (progress: UploadProgress) => void,
+    targetSizeMb?: number
 ): Promise<UploadResponse> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('shouldCompress', shouldCompress.toString());
     if (folder) {
         formData.append('folder', folder);
+    }
+    // When set, the backend also produces a size-capped shareable copy for Discord.
+    if (targetSizeMb) {
+        formData.append('targetSizeMb', targetSizeMb.toString());
     }
 
     try {

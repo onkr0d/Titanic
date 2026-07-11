@@ -2,6 +2,7 @@ import { getAuth } from 'firebase/auth';
 import axios from 'axios';
 import { getToken } from "firebase/app-check";
 import { appCheck } from '../App';
+import type { ShareableConfig } from './shareable';
 
 // if in dev, use the emulator
 const API_BASE_URL = (import.meta.env.DEV ? 'http://localhost:6969' : 'https://compress.ivan.boston') + '/api';
@@ -27,6 +28,7 @@ export interface FoldersResponse {
 
 export interface AppConfig {
     default_folder: string | null;
+    shareable?: ShareableConfig;
 }
 
 export interface UploadProgress {

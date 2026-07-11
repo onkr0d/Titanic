@@ -6,7 +6,7 @@ import Tooltip from './Tooltip';
 import { Switch } from './animate-ui/base/switch';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './animate-ui/components/radix/dropdown-menu';
 import { FolderOpen } from 'lucide-react';
-import { DISCORD_TIERS, VERDICT_COPY, predictQuality, probeVideoMeta, type VideoMeta } from '../utils/shareable';
+import { DISCORD_TIERS, VERDICT_COPY, applyShareableConfig, getMaxTargetMb, predictQuality, probeVideoMeta, type VideoMeta } from '../utils/shareable';
 
 interface FileState {
     file: File;
@@ -37,6 +37,7 @@ const FileUploader = () => {
             if (config?.default_folder) {
                 setDefaultFolder(config.default_folder);
             }
+            applyShareableConfig(config?.shareable);
         };
         fetchFoldersAndConfig();
 
@@ -119,6 +120,17 @@ const FileUploader = () => {
 
     const setFileTargetSize = (fileId: string, targetSizeMb: number | undefined) => {
         setFiles(prev => prev.map(f => (f.id === fileId ? { ...f, targetSizeMb } : f)));
+    };
+
+    const commitCustomSize = (fileId: string, raw: string) => {
+        const v = parseFloat(raw);
+        if (v > getMaxTargetMb()) {
+            showToast.error(`Target size must be at most ${getMaxTargetMb()} MB`);
+            setFileTargetSize(fileId, undefined);
+        } else {
+            setFileTargetSize(fileId, v > 0 ? v : undefined);
+        }
+        setCustomSizeId(null);
     };
 
     const removeFile = (fileId: string) => {
@@ -316,6 +328,7 @@ const FileUploader = () => {
                                                 <input
                                                     type="number"
                                                     min={1}
+                                                    max={getMaxTargetMb()}
                                                     autoFocus
                                                     defaultValue={targetSizeMb ?? ''}
                                                     placeholder="MB"
@@ -323,18 +336,13 @@ const FileUploader = () => {
                                                     onKeyDown={(e) => {
                                                         e.stopPropagation();
                                                         if (e.key === 'Enter') {
-                                                            const v = parseFloat((e.target as HTMLInputElement).value);
-                                                            setFileTargetSize(id, v > 0 ? v : undefined);
-                                                            setCustomSizeId(null);
+                                                            // Commit via blur; unmounting on Escape skips it.
+                                                            e.currentTarget.blur();
                                                         } else if (e.key === 'Escape') {
                                                             setCustomSizeId(null);
                                                         }
                                                     }}
-                                                    onBlur={(e) => {
-                                                        const v = parseFloat(e.target.value);
-                                                        setFileTargetSize(id, v > 0 ? v : undefined);
-                                                        setCustomSizeId(null);
-                                                    }}
+                                                    onBlur={(e) => commitCustomSize(id, e.target.value)}
                                                     className="text-xs w-16 bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                 />
                                             ) : (

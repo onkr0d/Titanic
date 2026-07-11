@@ -24,18 +24,39 @@ export const DISCORD_TIERS: SizeTier[] = [
 
 export type QualityVerdict = 'good' | 'ok' | 'rough' | 'unknown';
 
-// Must mirror the backend budget in build_shareable_copy: fixed AAC audio track
-// plus a container-overhead safety margin.
-const AUDIO_KBPS = 128;
-const SIZE_MARGIN = 0.95;
+export interface ShareableConfig {
+    audio_kbps: number;
+    size_margin: number;
+    min_video_kbps: number;
+    max_target_mb: number;
+}
+
+// Encode budget for the prediction. Defaults mirror the backend's
+// build_shareable_copy; overridden at runtime from /api/config.
+const config: ShareableConfig = {
+    audio_kbps: 128,
+    size_margin: 0.95,
+    min_video_kbps: 60,
+    max_target_mb: 2000,
+};
+
+export function applyShareableConfig(cfg?: Partial<ShareableConfig> | null) {
+    Object.assign(config, cfg ?? {});
+}
+
+export function getMaxTargetMb(): number {
+    return config.max_target_mb;
+}
+
 // Browsers don't reliably expose frame rate, so assume 30fps for the estimate.
 const ASSUMED_FPS = 30;
 
-/** Video bitrate (kbps) the target leaves after audio + overhead. */
+/** Video bitrate (kbps) the target leaves after audio + overhead, floored like the backend. */
 export function estimateVideoKbps(targetMb: number, durationSec: number): number {
     if (!durationSec || durationSec <= 0) return 0;
     const totalKbps = (targetMb * 8 * 1024) / durationSec;
-    return Math.floor(totalKbps * SIZE_MARGIN) - AUDIO_KBPS;
+    const videoKbps = Math.floor(totalKbps * config.size_margin) - config.audio_kbps;
+    return Math.max(videoKbps, config.min_video_kbps);
 }
 
 /**
@@ -56,7 +77,7 @@ export const VERDICT_COPY: Record<QualityVerdict, { dot: string; text: string }>
     good: { dot: 'bg-green-500', text: 'Should look great' },
     ok: { dot: 'bg-yellow-500', text: 'Watchable, some quality loss' },
     rough: { dot: 'bg-red-500', text: 'Will look rough — try a bigger size' },
-    unknown: { dot: 'bg-gray-400', text: 'Reading video…' },
+    unknown: { dot: 'bg-gray-400', text: "Can't predict quality" },
 };
 
 /** Read duration + resolution from a File locally via a throwaway <video>. */
@@ -70,6 +91,11 @@ export function probeVideoMeta(file: File): Promise<VideoMeta | null> {
             resolve(meta);
         };
         video.onloadedmetadata = () => {
+            // MediaRecorder WebMs / fragmented MP4s report Infinity here.
+            if (!Number.isFinite(video.duration) || video.duration <= 0) {
+                done(null);
+                return;
+            }
             done({
                 durationSec: video.duration,
                 width: video.videoWidth,

@@ -22,7 +22,14 @@ from sentry_sdk.integrations.quart import QuartIntegration
 from werkzeug.exceptions import RequestTimeout
 
 from fileutils import remove_quietly, sanitize_path_component, scrub_event
-from jobs.job import compress_video, upload_video_to_umbrel
+from jobs.job import (
+    SHAREABLE_AUDIO_KBPS,
+    SHAREABLE_MAX_TARGET_MB,
+    SHAREABLE_MIN_VIDEO_KBPS,
+    SHAREABLE_SIZE_MARGIN,
+    compress_video,
+    upload_video_to_umbrel,
+)
 
 IS_DEV = os.environ.get("IS_DEV", "false").lower() == "true"
 # Disabling authentication is deliberately its OWN flag, not a side effect of
@@ -486,8 +493,11 @@ async def upload_video():
                 target_size_mb = float(target_raw)
             except ValueError:
                 raise UploadError(400, "Invalid target size")
-            if not (0 < target_size_mb <= 2000):
-                raise UploadError(400, "Target size must be between 0 and 2000 MB")
+            if not (0 < target_size_mb <= SHAREABLE_MAX_TARGET_MB):
+                raise UploadError(
+                    400,
+                    f"Target size must be between 0 and {SHAREABLE_MAX_TARGET_MB} MB",
+                )
             should_compress = True
 
         folder = form.get("folder", "").strip() or None
@@ -590,6 +600,14 @@ async def space():
 @verify_firebase_token
 async def get_config():
     """Get app configuration derived from Umbrel settings"""
+    # Encode-budget constants for the frontend's shareable-copy quality prediction;
+    # served here so the two sides can't drift.
+    shareable_config = {
+        "audio_kbps": SHAREABLE_AUDIO_KBPS,
+        "size_margin": SHAREABLE_SIZE_MARGIN,
+        "min_video_kbps": SHAREABLE_MIN_VIDEO_KBPS,
+        "max_target_mb": SHAREABLE_MAX_TARGET_MB,
+    }
     try:
         logger.debug("Fetching settings from Umbrel server for config extraction")
         umbrel_base_url = os.environ.get("UMBREL_SERVER_URL", "http://umbrel:3029")
@@ -604,12 +622,17 @@ async def get_config():
         response.raise_for_status()
 
         settings_data = response.json()
-        return jsonify({"default_folder": settings_data.get("default_folder")}), 200
+        return jsonify(
+            {
+                "default_folder": settings_data.get("default_folder"),
+                "shareable": shareable_config,
+            }
+        ), 200
 
     except Exception as e:
         logger.error(f"Error fetching config from Umbrel settings: {str(e)}")
         # If settings are inaccessible, just return empty config (it will default to 'Clips' in frontend)
-        return jsonify({"default_folder": None}), 200
+        return jsonify({"default_folder": None, "shareable": shareable_config}), 200
 
 
 @app.route("/api/folders")

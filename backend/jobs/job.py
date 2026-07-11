@@ -137,7 +137,9 @@ def get_video_duration(input_file: str) -> float | None:
         return None
 
 
-def build_shareable_copy(source_file: str, target_size_mb: float, dest_dir: str) -> str:
+def build_shareable_copy(
+    source_file: str, target_size_mb: float, dest_dir: str, output_basename: str | None = None
+) -> str:
     """
     Two-pass HEVC encode of source_file sized to land under target_size_mb, written
     into dest_dir as "<stem>_<N>MB.<ext>". This is a *separate* shareable artifact
@@ -150,7 +152,7 @@ def build_shareable_copy(source_file: str, target_size_mb: float, dest_dir: str)
     if not duration:
         raise ValueError(f"Cannot size-target {source_file}: unknown duration")
 
-    stem, ext = os.path.splitext(os.path.basename(source_file))
+    stem, ext = os.path.splitext(output_basename or os.path.basename(source_file))
     # Normalize any int-valued target so filenames read "10MB" not "10.0MB".
     label = int(target_size_mb) if float(target_size_mb).is_integer() else target_size_mb
     dest_file = os.path.join(dest_dir, f"{stem}_{label}MB{ext or '.mp4'}")
@@ -205,10 +207,10 @@ def build_shareable_copy(source_file: str, target_size_mb: float, dest_dir: str)
     return dest_file
 
 
-def _build_shareable_quietly(source_file, target_size_mb, dest_dir):
+def _build_shareable_quietly(source_file, target_size_mb, dest_dir, output_basename=None):
     """Best-effort: the shareable copy is optional; never fail the job over it."""
     try:
-        return build_shareable_copy(source_file, target_size_mb, dest_dir)
+        return build_shareable_copy(source_file, target_size_mb, dest_dir, output_basename)
     except Exception:
         logger.exception("Shareable copy failed; delivering full-quality only")
         return None
@@ -584,7 +586,9 @@ def compress_video(input_file: str, target_size_mb: float | None = None) -> list
         # Full-quality output is safe; the shareable copy is best-effort from the
         # same source (best quality) and must never take the finished encode down.
         shareable_file = (
-            _build_shareable_quietly(source_file, target_size_mb, os.path.dirname(output_file))
+            _build_shareable_quietly(
+                source_file, target_size_mb, os.path.dirname(output_file), filename
+            )
             if target_size_mb
             else None
         )

@@ -125,7 +125,8 @@ export const uploadVideo = async (
     shouldCompress: boolean = true,
     folder?: string,
     onProgress?: (progress: UploadProgress) => void,
-    targetSizeMb?: number
+    targetSizeMb?: number,
+    keepFullQuality: boolean = true
 ): Promise<UploadResponse> => {
     const formData = new FormData();
     formData.append('file', file);
@@ -136,6 +137,9 @@ export const uploadVideo = async (
     // When set, the backend also produces a size-capped shareable copy for Discord.
     if (targetSizeMb) {
         formData.append('targetSizeMb', targetSizeMb.toString());
+        if (!keepFullQuality) {
+            formData.append('keepFullQuality', 'false');
+        }
     }
 
     try {

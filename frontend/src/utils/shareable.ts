@@ -22,13 +22,16 @@ export const DISCORD_TIERS: SizeTier[] = [
     { label: '500 MB', mb: 500, note: 'Nitro' },
 ];
 
-export type QualityVerdict = 'good' | 'ok' | 'rough' | 'unknown';
+export type QualityVerdict = 'good' | 'ok' | 'rough' | 'fits' | 'unknown';
 
 export interface ShareableConfig {
     audio_kbps: number;
     size_margin: number;
     min_video_kbps: number;
     max_target_mb: number;
+    // Backend capability flags; default false so an older backend gets the old UI.
+    skip_if_under?: boolean;
+    supports_only?: boolean;
 }
 
 // Encode budget for the prediction. Defaults mirror the backend's
@@ -38,6 +41,8 @@ const config: ShareableConfig = {
     size_margin: 0.95,
     min_video_kbps: 60,
     max_target_mb: 2000,
+    skip_if_under: false,
+    supports_only: false,
 };
 
 export function applyShareableConfig(cfg?: Partial<ShareableConfig> | null) {
@@ -46,6 +51,10 @@ export function applyShareableConfig(cfg?: Partial<ShareableConfig> | null) {
 
 export function getMaxTargetMb(): number {
     return config.max_target_mb;
+}
+
+export function supportsShareableOnly(): boolean {
+    return !!config.supports_only;
 }
 
 // Browsers don't reliably expose frame rate, so assume 30fps for the estimate.
@@ -62,8 +71,10 @@ export function estimateVideoKbps(targetMb: number, durationSec: number): number
 /**
  * Predict how a size-capped HEVC copy will look, via bits-per-pixel-per-frame.
  * Thresholds are tuned for x265 (roughly half the bitrate of x264 for parity).
+ * A file already under the cap reports 'fits' — the backend skips the extra copy.
  */
-export function predictQuality(targetMb: number, meta?: VideoMeta): QualityVerdict {
+export function predictQuality(targetMb: number, meta?: VideoMeta, fileSizeBytes?: number): QualityVerdict {
+    if (config.skip_if_under && fileSizeBytes && fileSizeBytes <= targetMb * 1024 * 1024) return 'fits';
     if (!meta || !meta.durationSec || !meta.width || !meta.height) return 'unknown';
     const videoKbps = estimateVideoKbps(targetMb, meta.durationSec);
     if (videoKbps <= 0) return 'rough';
@@ -77,6 +88,7 @@ export const VERDICT_COPY: Record<QualityVerdict, { dot: string; text: string }>
     good: { dot: 'bg-green-500', text: 'Should look great' },
     ok: { dot: 'bg-yellow-500', text: 'Watchable, some quality loss' },
     rough: { dot: 'bg-red-500', text: 'Will look rough — try a bigger size' },
+    fits: { dot: 'bg-blue-500', text: 'Already under the cap — no extra copy will be made' },
     unknown: { dot: 'bg-gray-400', text: "Can't predict quality" },
 };
 

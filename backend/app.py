@@ -22,13 +22,12 @@ from sentry_sdk.integrations.quart import QuartIntegration
 from werkzeug.exceptions import RequestTimeout
 
 from fileutils import remove_quietly, sanitize_path_component, scrub_event
-from jobs.job import (
+from jobs.job import compress_video, upload_video_to_umbrel
+from jobs.shareable import (
     SHAREABLE_AUDIO_KBPS,
     SHAREABLE_MAX_TARGET_MB,
     SHAREABLE_MIN_VIDEO_KBPS,
     SHAREABLE_SIZE_MARGIN,
-    compress_video,
-    upload_video_to_umbrel,
 )
 
 IS_DEV = os.environ.get("IS_DEV", "false").lower() == "true"
@@ -423,7 +422,9 @@ def _mint_refresh_token(user):
     return resp.json()["refreshToken"]  # response also has idToken, expiresIn
 
 
-def _enqueue_processing(filepath, job_meta, should_compress, target_size_mb=None):
+def _enqueue_processing(
+    filepath, job_meta, should_compress, target_size_mb=None, keep_full_quality=True
+):
     """Enqueue the upload-to-Umbrel job, optionally behind an ffmpeg compress job.
 
     The enqueue pair is the commit point. If the umbrel enqueue fails after the
@@ -431,8 +432,8 @@ def _enqueue_processing(filepath, job_meta, should_compress, target_size_mb=None
     later run against a file the caller's error path is about to delete (the race
     flagged in PR #235's review).
 
-    When target_size_mb is set, the compress job also emits a size-capped
-    "shareable" copy alongside the full-quality one, and both get uploaded.
+    A target_size_mb adds a size-capped copy (skipped if the output already fits);
+    keep_full_quality=False delivers only that copy, under the original filename.
     """
     if not should_compress:
         # If compression is disabled, just upload the original file
@@ -440,7 +441,9 @@ def _enqueue_processing(filepath, job_meta, should_compress, target_size_mb=None
         return
 
     ffmpeg_job = ffmpeg_queue.enqueue(
-        compress_video, args=[filepath, target_size_mb], result_ttl=86400
+        compress_video,
+        args=[filepath, target_size_mb, keep_full_quality],
+        result_ttl=86400,
     )
     try:
         umbrel_queue.enqueue(
@@ -500,6 +503,11 @@ async def upload_video():
                 )
             should_compress = True
 
+        # Deliver only the size-capped copy; meaningless without a target.
+        keep_full_quality = form.get("keepFullQuality", "true").lower() != "false"
+        if not keep_full_quality and target_size_mb is None:
+            raise UploadError(400, "keepFullQuality=false requires targetSizeMb")
+
         folder = form.get("folder", "").strip() or None
         # Fail fast: reject a bad folder name here (before the expensive compress
         # job) rather than letting it fail at the umbrel step post-processing.
@@ -532,7 +540,9 @@ async def upload_video():
 
         # Commit point: rename the .part into place, then enqueue the job pair.
         filepath = _claim_upload_path(file)
-        _enqueue_processing(filepath, job_meta, should_compress, target_size_mb)
+        _enqueue_processing(
+            filepath, job_meta, should_compress, target_size_mb, keep_full_quality
+        )
 
         # Job successfully enqueued — handler owns the file no longer; don't clean up.
         g._upload_final_path = None
@@ -607,6 +617,9 @@ async def get_config():
         "size_margin": SHAREABLE_SIZE_MARGIN,
         "min_video_kbps": SHAREABLE_MIN_VIDEO_KBPS,
         "max_target_mb": SHAREABLE_MAX_TARGET_MB,
+        # Capability flags so a newer frontend can gate UI on backend support.
+        "skip_if_under": True,
+        "supports_only": True,
     }
     try:
         logger.debug("Fetching settings from Umbrel server for config extraction")

@@ -15,6 +15,7 @@ from firebase_admin import credentials
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 
 from fileutils import remove_quietly
+from jobs.shareable import _X265_PARAMS, build_shareable_copy, fits_target
 
 # Logging configuration note:
 # - When imported by app.py, this module's basicConfig runs first; app.py's later
@@ -28,23 +29,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
-# force pool for multicore util
-_X265_PARAMS = f"pools={os.cpu_count() or 1}"
-
-# Size-targeted "shareable" copies re-encode audio to a fixed AAC bitrate so the
-# byte budget is predictable (the main pipeline stream-copies audio, which isn't).
-# Public: served to the frontend via /api/config so its quality prediction stays
-# in sync with the actual encode budget.
-SHAREABLE_AUDIO_KBPS = 128
-# Leave headroom under the requested size for container/muxing overhead so the
-# result actually lands under a hard limit (e.g. Discord) rather than just near it.
-SHAREABLE_SIZE_MARGIN = 0.95
-# Floor the video bitrate so an absurdly small target still produces a valid file
-# instead of failing the encode; the UI already warns when quality will be rough.
-SHAREABLE_MIN_VIDEO_KBPS = 60
-SHAREABLE_MAX_TARGET_MB = 2000
-
 
 def initialize_firebase():
     """
@@ -124,96 +108,30 @@ def get_video_codec(input_file: str) -> str:
         return None
 
 
-def get_video_duration(input_file: str) -> float | None:
-    """
-    Get a video's duration in seconds via ffprobe. Returns None if it can't be
-    determined (needed to turn a target file size into a bitrate budget).
-    """
-    try:
-        duration = float(ffmpeg.probe(input_file)["format"]["duration"])
-        return duration if duration > 0 else None
-    except (ffmpeg.Error, ValueError, KeyError) as e:
-        logger.error(f"Failed to probe duration for {input_file}: {e}")
+def _maybe_build_shareable(
+    encode_source, delivered_file, target_size_mb, dest_dir, output_basename=None
+):
+    """Best-effort extra copy; skipped when the delivered file already fits."""
+    if fits_target(delivered_file, target_size_mb):
+        logger.info(
+            "Output already fits %sMB target; skipping shareable copy", target_size_mb
+        )
         return None
-
-
-def build_shareable_copy(
-    source_file: str, target_size_mb: float, dest_dir: str, output_basename: str | None = None
-) -> str:
-    """
-    Two-pass HEVC encode of source_file sized to land under target_size_mb, written
-    into dest_dir as "<stem>_<N>MB.<ext>". This is a *separate* shareable artifact
-    (e.g. to drop in Discord); the full-quality copy is produced independently.
-
-    Bitrate budget: total_kbps = target_bits / duration, minus the fixed AAC audio
-    track, times a safety margin for container overhead so it clears a hard cap.
-    """
-    duration = get_video_duration(source_file)
-    if not duration:
-        raise ValueError(f"Cannot size-target {source_file}: unknown duration")
-
-    stem, ext = os.path.splitext(output_basename or os.path.basename(source_file))
-    # Normalize any int-valued target so filenames read "10MB" not "10.0MB".
-    label = int(target_size_mb) if float(target_size_mb).is_integer() else target_size_mb
-    dest_file = os.path.join(dest_dir, f"{stem}_{label}MB{ext or '.mp4'}")
-
-    total_kbps = (target_size_mb * 8 * 1024) / duration
-    video_kbps = int(total_kbps * SHAREABLE_SIZE_MARGIN) - SHAREABLE_AUDIO_KBPS
-    if video_kbps < SHAREABLE_MIN_VIDEO_KBPS:
-        logger.warning(
-            "Target %sMB over %.0fs leaves only %dkbps for video; flooring to %dkbps "
-            "(result may exceed target and look rough).",
-            target_size_mb, duration, video_kbps, SHAREABLE_MIN_VIDEO_KBPS,
-        )
-        video_kbps = SHAREABLE_MIN_VIDEO_KBPS
-
-    # Per-encode stats file so concurrent workers don't clobber each other's pass log.
-    stats_file = os.path.join(dest_dir, f".{stem}_{os.getpid()}_x265.log")
-    common = [
-        "ffmpeg", "-y", "-i", source_file,
-        "-c:v", "libx265", "-b:v", f"{video_kbps}k", "-preset", "medium",
-    ]
     try:
-        subprocess.run(
-            common
-            + [
-                "-x265-params", f"pass=1:stats={stats_file}:{_X265_PARAMS}",
-                "-an", "-f", "null", os.devnull,
-            ],
-            capture_output=True, text=True, check=True,
+        return build_shareable_copy(
+            encode_source, target_size_mb, dest_dir, output_basename
         )
-        subprocess.run(
-            common
-            + [
-                "-x265-params", f"pass=2:stats={stats_file}:{_X265_PARAMS}",
-                "-tag:v", "hvc1",
-                "-c:a", "aac", "-b:a", f"{SHAREABLE_AUDIO_KBPS}k",
-                "-movflags", "+faststart", "-map_metadata", "0", dest_file,
-            ],
-            capture_output=True, text=True, check=True,
-        )
-    except subprocess.CalledProcessError as e:
-        logger.error("Shareable encode failed: %s", e)
-        logger.error("FFmpeg stderr: %s", e.stderr)
-        # Drop the partial pass-2 output; nobody else knows this path exists yet.
-        remove_quietly(dest_file)
-        raise
-    finally:
-        # x265 writes "<stats>" and "<stats>.cutree"/".mbtree"; sweep them all.
-        for suffix in ("", ".cutree", ".mbtree", ".temp"):
-            remove_quietly(stats_file + suffix)
-
-    logger.info("Built shareable copy (~%sMB target): %s", target_size_mb, dest_file)
-    return dest_file
-
-
-def _build_shareable_quietly(source_file, target_size_mb, dest_dir, output_basename=None):
-    """Best-effort: the shareable copy is optional; never fail the job over it."""
-    try:
-        return build_shareable_copy(source_file, target_size_mb, dest_dir, output_basename)
     except Exception:
         logger.exception("Shareable copy failed; delivering full-quality only")
         return None
+
+
+def _deliver(output_file, shareable_file, keep_full_quality):
+    """Shareable-only delivers the capped copy alone, under the original name."""
+    if shareable_file and not keep_full_quality:
+        os.replace(shareable_file, output_file)
+        return [output_file]
+    return [output_file, shareable_file] if shareable_file else [output_file]
 
 
 def get_audio_streams(input_file: str) -> list:
@@ -473,7 +391,82 @@ def is_h265_video(input_file: str) -> bool:
     return False
 
 
-def compress_video(input_file: str, target_size_mb: float | None = None) -> list[str]:
+def _encode_full_quality(source_file: str, output_file: str) -> None:
+    """CRF-22 HEVC transcode with an ffmpeg-python fallback; raises if both fail."""
+    try:
+        # Probe number of audio streams for disposition logic
+        audio_streams = get_audio_streams(source_file)
+        num_audio_streams = len(audio_streams)
+        logger.debug(f"Source file has {num_audio_streams} audio stream(s)")
+
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            source_file,
+            # keep everything (video + all audio + any subs) in order
+            "-map",
+            "0",
+            # video re-encode
+            "-c:v",
+            "libx265",
+            "-crf",
+            "22",
+            "-preset",
+            "medium",
+            # force pools
+            "-x265-params",
+            _X265_PARAMS,
+            "-tag:v",
+            "hvc1",
+            # copy audio/subs as-is
+            "-c:a",
+            "copy",
+            "-c:s",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "-map_metadata",
+            "0",
+        ]
+
+        # Make the first audio track default (this is our loudnorm'd mix)
+        if num_audio_streams >= 1:
+            cmd += ["-disposition:a:0", "default"]
+        # Clear others if present
+        if num_audio_streams >= 2:
+            cmd += ["-disposition:a:1", "0"]
+        if num_audio_streams >= 3:
+            cmd += ["-disposition:a:2", "0"]
+
+        cmd += [output_file]
+
+        logger.debug("FFmpeg (HEVC transcode): %s", " ".join(cmd))
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        logger.debug(f"Video compression completed: {output_file}")
+
+    except subprocess.CalledProcessError as e:
+        logger.error("Video compression failed: %s", e)
+        logger.error("FFmpeg stderr: %s", e.stderr)
+        # Fallback with ffmpeg-python
+        out_opts = {"c:a": "copy", "map": "0", "x265-params": _X265_PARAMS}
+        ffmpeg.input(source_file).output(
+            output_file,
+            vcodec="libx265",
+            crf=22,
+            preset="medium",
+            **out_opts,
+            vtag="hvc1",
+            movflags="+faststart",
+            map_metadata=0,
+        ).run()
+
+
+def compress_video(
+    input_file: str,
+    target_size_mb: float | None = None,
+    keep_full_quality: bool = True,
+) -> list[str]:
     filename = os.path.basename(input_file)
     output_file = os.path.join(
         os.path.dirname(os.path.dirname(input_file)), "compressed", filename
@@ -487,6 +480,30 @@ def compress_video(input_file: str, target_size_mb: float | None = None) -> list
     audio_processed_file = process_audio_with_rnnoise(input_file, temp_audio_processed)
     source_file = audio_processed_file if audio_processed_file else input_file
 
+    # Shareable-only: skip the full-quality encode; an already-fitting source
+    # falls through to the normal pipeline instead.
+    if (
+        target_size_mb
+        and not keep_full_quality
+        and not fits_target(source_file, target_size_mb)
+    ):
+        try:
+            # Sole artifact, so not best-effort: failure fails the job.
+            build_shareable_copy(
+                source_file,
+                target_size_mb,
+                os.path.dirname(output_file),
+                filename,
+                dest_file=output_file,
+                preserve_streams=True,
+            )
+        finally:
+            if audio_processed_file and source_file != input_file:
+                remove_quietly(source_file)
+        remove_quietly(input_file)
+        logger.info(f"Video processing complete: {filename}")
+        return [output_file]
+
     if is_h265_video(source_file):
         logger.info("Video is already H.265, skipping full-quality re-encode")
         if source_file != output_file:
@@ -498,82 +515,17 @@ def compress_video(input_file: str, target_size_mb: float | None = None) -> list
             pass
         # A size target still re-encodes, so log "complete" only after the shareable copy.
         shareable = (
-            _build_shareable_quietly(output_file, target_size_mb, os.path.dirname(output_file))
+            _maybe_build_shareable(
+                output_file, output_file, target_size_mb, os.path.dirname(output_file)
+            )
             if target_size_mb
             else None
         )
         logger.info(f"Video processing complete: {filename}")
-        return [output_file, shareable] if shareable else [output_file]
+        return _deliver(output_file, shareable, keep_full_quality)
 
     try:
-        try:
-            # Probe number of audio streams for disposition logic
-            audio_streams = get_audio_streams(source_file)
-            num_audio_streams = len(audio_streams)
-            logger.debug(f"Source file has {num_audio_streams} audio stream(s)")
-
-            cmd = [
-                "ffmpeg",
-                "-y",
-                "-i",
-                source_file,
-                # keep everything (video + all audio + any subs) in order
-                "-map",
-                "0",
-                # video re-encode
-                "-c:v",
-                "libx265",
-                "-crf",
-                "22",
-                "-preset",
-                "medium",
-                # force pools
-                "-x265-params",
-                _X265_PARAMS,
-                "-tag:v",
-                "hvc1",
-                # copy audio/subs as-is
-                "-c:a",
-                "copy",
-                "-c:s",
-                "copy",
-                "-movflags",
-                "+faststart",
-                "-map_metadata",
-                "0",
-            ]
-
-            # Make the first audio track default (this is our loudnorm'd mix)
-            if num_audio_streams >= 1:
-                cmd += ["-disposition:a:0", "default"]
-            # Clear others if present
-            if num_audio_streams >= 2:
-                cmd += ["-disposition:a:1", "0"]
-            if num_audio_streams >= 3:
-                cmd += ["-disposition:a:2", "0"]
-
-            cmd += [output_file]
-
-            logger.debug("FFmpeg (HEVC transcode): %s", " ".join(cmd))
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
-            logger.debug(f"Video compression completed: {output_file}")
-
-        except subprocess.CalledProcessError as e:
-            logger.error("Video compression failed: %s", e)
-            logger.error("FFmpeg stderr: %s", e.stderr)
-            # Fallback with ffmpeg-python
-            out_opts = {"c:a": "copy", "map": "0", "x265-params": _X265_PARAMS}
-            ffmpeg.input(source_file).output(
-                output_file,
-                vcodec="libx265",
-                crf=22,
-                preset="medium",
-                **out_opts,
-                vtag="hvc1",
-                movflags="+faststart",
-                map_metadata=0,
-            ).run()
-
+        _encode_full_quality(source_file, output_file)
     except Exception:
         # Primary and fallback transcode both failed — drop the partial/corrupt
         # output so it doesn't pile up in compressed/, then re-raise to fail the job.
@@ -583,11 +535,10 @@ def compress_video(input_file: str, target_size_mb: float | None = None) -> list
         remove_quietly(output_file)
         raise
     else:
-        # Full-quality output is safe; the shareable copy is best-effort from the
-        # same source (best quality) and must never take the finished encode down.
+        # Extra copy encodes from the pre-transcode source for best quality.
         shareable_file = (
-            _build_shareable_quietly(
-                source_file, target_size_mb, os.path.dirname(output_file), filename
+            _maybe_build_shareable(
+                source_file, output_file, target_size_mb, os.path.dirname(output_file), filename
             )
             if target_size_mb
             else None
@@ -602,7 +553,7 @@ def compress_video(input_file: str, target_size_mb: float | None = None) -> list
         if audio_processed_file and source_file != input_file:
             remove_quietly(source_file)
 
-    return [output_file, shareable_file] if shareable_file else [output_file]
+    return _deliver(output_file, shareable_file, keep_full_quality)
 
 
 def retry_with_exponential_backoff(

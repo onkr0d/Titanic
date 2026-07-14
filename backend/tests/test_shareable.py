@@ -176,7 +176,28 @@ def test_shareable_only_when_only_reencode_overshoots(pipeline, monkeypatch):
     monkeypatch.setattr(job, "fits_target", lambda p, t: p == input_file)
     result = job.compress_video(input_file, 10, keep_full_quality=False)
     assert result == [output_file]
-    assert calls["full"] == 1 and len(calls["shareable"]) == 1
+    assert calls["full"] == 1
+    # Still the sole artifact, so all streams must be preserved.
+    assert calls["shareable"] == [
+        {"source": input_file, "dest_file": None, "preserve": True}
+    ]
     with open(output_file, "rb") as f:
         assert f.read() == b"s" * 16
     assert not os.path.exists(os.path.join(os.path.dirname(output_file), "clip_10MB.mp4"))
+
+
+def test_shareable_only_overshoot_encode_failure_fails_job(pipeline, monkeypatch):
+    # Sole deliverable: a failed capped encode must fail the job, not silently
+    # deliver the oversized full-quality file.
+    input_file, output_file, calls = pipeline
+    monkeypatch.setattr(job, "fits_target", lambda p, t: p == input_file)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("encode failed")
+
+    monkeypatch.setattr(job, "build_shareable_copy", boom)
+    with pytest.raises(RuntimeError):
+        job.compress_video(input_file, 10, keep_full_quality=False)
+    # Oversized full encode is dropped; the original upload survives for reprocessing.
+    assert not os.path.exists(output_file)
+    assert os.path.exists(input_file)

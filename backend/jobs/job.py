@@ -535,14 +535,27 @@ def compress_video(
         remove_quietly(output_file)
         raise
     else:
-        # Extra copy encodes from the pre-transcode source for best quality.
-        shareable_file = (
-            _maybe_build_shareable(
+        shareable_file = None
+        if target_size_mb and not keep_full_quality:
+            if not fits_target(output_file, target_size_mb):
+                try:
+                    # Sole artifact, so not best-effort: failure fails the job.
+                    shareable_file = build_shareable_copy(
+                        source_file,
+                        target_size_mb,
+                        os.path.dirname(output_file),
+                        filename,
+                        preserve_streams=True,
+                    )
+                except Exception:
+                    # Drop the oversized full encode; keep input_file for reprocessing.
+                    remove_quietly(output_file)
+                    raise
+        elif target_size_mb:
+            # Extra copy encodes from the pre-transcode source for best quality.
+            shareable_file = _maybe_build_shareable(
                 source_file, output_file, target_size_mb, os.path.dirname(output_file), filename
             )
-            if target_size_mb
-            else None
-        )
         logger.info(f"Video processing complete: {filename}")
         # Success — the compressed output is in place, so the original upload is no
         # longer needed. Remove it so orphaned files can't accumulate and fill the disk.

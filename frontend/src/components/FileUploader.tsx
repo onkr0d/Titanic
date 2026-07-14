@@ -4,9 +4,9 @@ import { showToast } from '../utils/toast';
 import { uploadVideo, getFolders, getAppConfig } from '../utils/api';
 import Tooltip from './Tooltip';
 import { Switch } from './animate-ui/base/switch';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './animate-ui/components/radix/dropdown-menu';
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './animate-ui/components/radix/dropdown-menu';
 import { FolderOpen } from 'lucide-react';
-import { DISCORD_TIERS, VERDICT_COPY, applyShareableConfig, getMaxTargetMb, predictQuality, probeVideoMeta, type VideoMeta } from '../utils/shareable';
+import { DISCORD_TIERS, VERDICT_COPY, applyShareableConfig, getMaxTargetMb, predictQuality, probeVideoMeta, supportsShareableOnly, type VideoMeta } from '../utils/shareable';
 
 interface FileState {
     file: File;
@@ -17,6 +17,7 @@ interface FileState {
     folder?: string;
     progress?: number;
     targetSizeMb?: number;   // undefined = no shareable copy
+    keepFullQuality: boolean; // false = deliver only the size-capped copy
     meta?: VideoMeta;        // probed locally for the quality prediction
 }
 
@@ -107,6 +108,7 @@ const FileUploader = () => {
             shouldCompress: true, // Default to true for compression
             folder: defaultFolder, // Configured default folder
             progress: undefined,
+            keepFullQuality: true,
         }));
         setFiles(prev => [...prev, ...entries]);
         // Probe duration/resolution locally so the size dropdown can predict quality
@@ -119,7 +121,15 @@ const FileUploader = () => {
     };
 
     const setFileTargetSize = (fileId: string, targetSizeMb: number | undefined) => {
-        setFiles(prev => prev.map(f => (f.id === fileId ? { ...f, targetSizeMb } : f)));
+        // Clearing the cap resets shareable-only; the option only exists with a cap.
+        setFiles(prev => prev.map(f => (f.id === fileId
+            ? { ...f, targetSizeMb, keepFullQuality: targetSizeMb ? f.keepFullQuality : true }
+            : f
+        )));
+    };
+
+    const setKeepFullQuality = (fileId: string, keepFullQuality: boolean) => {
+        setFiles(prev => prev.map(f => (f.id === fileId ? { ...f, keepFullQuality } : f)));
     };
 
     const commitCustomSize = (fileId: string, raw: string) => {
@@ -142,7 +152,12 @@ const FileUploader = () => {
             f.id === fileId
                 // Turning compression off drops any size cap too — a shareable copy
                 // requires a re-encode, so a stale target must not survive the toggle.
-                ? { ...f, shouldCompress: !f.shouldCompress, targetSizeMb: f.shouldCompress ? undefined : f.targetSizeMb }
+                ? {
+                    ...f,
+                    shouldCompress: !f.shouldCompress,
+                    targetSizeMb: f.shouldCompress ? undefined : f.targetSizeMb,
+                    keepFullQuality: f.shouldCompress ? true : f.keepFullQuality,
+                }
                 : f
         ));
     };
@@ -174,12 +189,12 @@ const FileUploader = () => {
 
         try {
             // Upload all files in parallel
-            const uploadPromises = readyFiles.map(async ({ file, id, shouldCompress, folder, targetSizeMb }) => {
+            const uploadPromises = readyFiles.map(async ({ file, id, shouldCompress, folder, targetSizeMb, keepFullQuality }) => {
                 const result = await uploadVideo(file, shouldCompress, folder, (progress) => {
                     setFiles(prev => prev.map(f =>
                         f.id === id ? { ...f, progress: progress.progress } : f
                     ));
-                }, targetSizeMb);
+                }, targetSizeMb, keepFullQuality);
 
                 if (result.success) {
                     // Update file status to uploaded
@@ -245,10 +260,12 @@ const FileUploader = () => {
             {files.length > 0 && (
                 <div className="mt-6">
                     <div className="space-y-3">
-                        {files.map(({ file, id, status, error, shouldCompress, folder, progress, targetSizeMb, meta }) => (
+                        {files.map(({ file, id, status, error, shouldCompress, folder, progress, targetSizeMb, keepFullQuality, meta }) => {
+                            const sizeVerdict = targetSizeMb ? predictQuality(targetSizeMb, meta, file.size) : 'unknown';
+                            return (
                             <div
                                 key={id}
-                                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                                className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-y-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
                             >
                                 <div className="flex items-center space-x-3 flex-grow min-w-0">
                                     <Clapperboard className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0" />
@@ -274,7 +291,7 @@ const FileUploader = () => {
                                         )}
                                     </div>
                                 </div>
-                                <div className="flex items-center space-x-2 flex-shrink-0">
+                                <div className={`flex items-center space-x-2 flex-shrink-0 ${status === 'uploaded' || status === 'uploading' ? '' : 'basis-full sm:basis-auto justify-end'}`}>
                                     {status === 'uploaded' ? (
                                         <Check className="w-5 h-5 text-green-500" />
                                     ) : status === 'uploading' ? (
@@ -349,7 +366,9 @@ const FileUploader = () => {
                                                 <Tooltip
                                                     content={
                                                         targetSizeMb
-                                                            ? `Shareable copy capped at ${targetSizeMb}MB — ${VERDICT_COPY[predictQuality(targetSizeMb, meta)].text}`
+                                                            ? (sizeVerdict === 'fits'
+                                                                ? `Already under ${targetSizeMb}MB — no extra copy will be made`
+                                                                : `${keepFullQuality ? 'Shareable copy' : 'Only delivered file'} capped at ${targetSizeMb}MB — ${VERDICT_COPY[sizeVerdict].text}`)
                                                             : "Also make a size-capped copy to share (e.g. Discord)"
                                                     }
                                                 >
@@ -361,8 +380,8 @@ const FileUploader = () => {
                                                             >
                                                                 {targetSizeMb ? (
                                                                     <>
-                                                                        <span className={`w-2 h-2 rounded-full ${VERDICT_COPY[predictQuality(targetSizeMb, meta)].dot}`} />
-                                                                        {targetSizeMb} MB
+                                                                        <span className={`w-2 h-2 rounded-full ${VERDICT_COPY[sizeVerdict].dot}`} />
+                                                                        {targetSizeMb} MB{!keepFullQuality && ' only'}
                                                                     </>
                                                                 ) : (
                                                                     <>
@@ -380,7 +399,7 @@ const FileUploader = () => {
                                                                 Full quality (no cap)
                                                             </DropdownMenuItem>
                                                             {DISCORD_TIERS.map(tier => {
-                                                                const verdict = predictQuality(tier.mb, meta);
+                                                                const verdict = predictQuality(tier.mb, meta, file.size);
                                                                 return (
                                                                     <DropdownMenuItem
                                                                         key={tier.mb}
@@ -398,6 +417,18 @@ const FileUploader = () => {
                                                             <DropdownMenuItem onClick={() => setCustomSizeId(id)}>
                                                                 Custom…
                                                             </DropdownMenuItem>
+                                                            {targetSizeMb && supportsShareableOnly() ? (
+                                                                <>
+                                                                    <DropdownMenuSeparator />
+                                                                    <DropdownMenuCheckboxItem
+                                                                        checked={keepFullQuality}
+                                                                        onCheckedChange={(checked) => setKeepFullQuality(id, !!checked)}
+                                                                        onSelect={(e) => e.preventDefault()}
+                                                                    >
+                                                                        Also keep full quality
+                                                                    </DropdownMenuCheckboxItem>
+                                                                </>
+                                                            ) : null}
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
                                                 </Tooltip>
@@ -428,7 +459,8 @@ const FileUploader = () => {
                                     )}
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
                     {files.some(f => f.status === 'ready') && (

@@ -26,14 +26,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python
-        # Stdlib-only tests, so the exact 3.x doesn't matter; 3.13 keeps the job
-        # fast and broadly available across runners.
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
 
-      - name: Install pytest
-        run: pip install pytest
+      - name: Install test dependencies
+        # jobs.job import-time deps only; the full stack runs in the E2E job
+        run: pip install pytest ffmpeg-python firebase-admin requests requests-toolbelt rq
 
       - name: Run tests
         run: pytest

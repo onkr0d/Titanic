@@ -135,6 +135,10 @@ status=$(curl -s -o /dev/null -w "%{http_code}" "$QUART_URL/api/config")
 body=$(curl -sf "$QUART_URL/api/config")
 echo "$body" | grep -q '"default_folder"' && pass "GET /api/config has 'default_folder' key" || fail "GET /api/config body" "missing 'default_folder'"
 
+# Shareable capability flags gate the frontend's size-cap UI
+echo "$body" | grep -q '"skip_if_under"' && pass "GET /api/config advertises 'skip_if_under'" || fail "GET /api/config body" "missing 'skip_if_under'"
+echo "$body" | grep -q '"supports_only"' && pass "GET /api/config advertises 'supports_only'" || fail "GET /api/config body" "missing 'supports_only'"
+
 # ── Summary ────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

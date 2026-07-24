@@ -25,7 +25,7 @@ grpcio-status==1.81.0
 h11==0.16.0
 h2==4.3.0
 hpack==4.1.0
-httplib2==0.31.2
+httplib2==0.32.0
 Hypercorn==0.18.0
 hyperframe==6.1.0
 idna==3.18

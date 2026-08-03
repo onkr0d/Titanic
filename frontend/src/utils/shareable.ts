@@ -60,7 +60,7 @@ export function supportsShareableOnly(): boolean {
     return !!config.supports_only;
 }
 
-// fallback if unsupported - mkv/webm. high on purpose, so we oversize not under.
+// fallback if unsupported (mkv/webm). high on purpose, so we oversize not under.
 export const FALLBACK_FPS = 60;
 
 /** Video bitrate (kbps) the target leaves after audio + overhead, floored like the backend. */
@@ -99,8 +99,19 @@ const FPS_CHUNK_BYTES = 1 << 20;
 // bounds a runaway loop, not the file size - appendBuffer seeks straight to moov
 const FPS_MAX_READS = 32;
 
+// what an iso-bmff file can start with. matroska walks the whole file otherwise.
+const ISOBMFF_BOXES = new Set(['ftyp', 'moov', 'mdat', 'free', 'skip', 'wide', 'pnot', 'styp']);
+
+async function isIsoBmff(file: File): Promise<boolean> {
+    const head = await file.slice(0, 8).arrayBuffer();
+    if (head.byteLength < 8) return false;
+    return ISOBMFF_BOXES.has(String.fromCharCode(...new Uint8Array(head, 4, 4)));
+}
+
 /** Average frame rate from the sample table, or null. MP4/MOV only. */
 export async function probeFps(file: File): Promise<number | null> {
+    if (!(await isIsoBmff(file))) return null;
+
     let MP4Box: typeof import('mp4box');
     try {
         // lazy - keeps 42KB out of the initial bundle

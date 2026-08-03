@@ -7,6 +7,9 @@ export interface VideoMeta {
     durationSec: number;
     width: number;
     height: number;
+    fps: number;
+    // false when fps came from the fallback
+    fpsMeasured: boolean;
 }
 
 export interface SizeTier {
@@ -57,8 +60,8 @@ export function supportsShareableOnly(): boolean {
     return !!config.supports_only;
 }
 
-// Browsers don't reliably expose frame rate, so assume 30fps for the estimate.
-const ASSUMED_FPS = 30;
+// fallback if unsupported - mkv/webm. high on purpose, so we oversize not under.
+export const FALLBACK_FPS = 60;
 
 /** Video bitrate (kbps) the target leaves after audio + overhead, floored like the backend. */
 export function estimateVideoKbps(targetMb: number, durationSec: number): number {
@@ -78,7 +81,7 @@ export function predictQuality(targetMb: number, meta?: VideoMeta, fileSizeBytes
     if (!meta || !meta.durationSec || !meta.width || !meta.height) return 'unknown';
     const videoKbps = estimateVideoKbps(targetMb, meta.durationSec);
     if (videoKbps <= 0) return 'rough';
-    const bpp = (videoKbps * 1000) / (meta.width * meta.height * ASSUMED_FPS);
+    const bpp = (videoKbps * 1000) / (meta.width * meta.height * meta.fps);
     if (bpp >= 0.04) return 'good';
     if (bpp >= 0.02) return 'ok';
     return 'rough';
@@ -92,13 +95,56 @@ export const VERDICT_COPY: Record<QualityVerdict, { dot: string; text: string }>
     unknown: { dot: 'bg-gray-400', text: "Can't predict quality" },
 };
 
+const FPS_CHUNK_BYTES = 1 << 20;
+// bounds a runaway loop, not the file size - appendBuffer seeks straight to moov
+const FPS_MAX_READS = 32;
+
+/** Average frame rate from the sample table, or null. MP4/MOV only. */
+export async function probeFps(file: File): Promise<number | null> {
+    let MP4Box: typeof import('mp4box');
+    try {
+        // lazy - keeps 42KB out of the initial bundle
+        MP4Box = await import('mp4box');
+    } catch {
+        return null;
+    }
+
+    const iso = MP4Box.createFile(false);
+    let info: import('mp4box').Movie | null = null;
+    iso.onReady = (movie) => { info = movie; };
+    iso.onError = () => { info = null; };
+
+    try {
+        let pos = 0;
+        for (let reads = 0; reads < FPS_MAX_READS && pos < file.size && !info; reads++) {
+            const slice = await file.slice(pos, pos + FPS_CHUNK_BYTES).arrayBuffer();
+            if (slice.byteLength === 0) break;
+            const next = iso.appendBuffer(MP4Box.MP4BoxBuffer.fromArrayBuffer(slice, pos));
+            pos = next > pos ? next : pos + slice.byteLength;
+        }
+    } catch {
+        return null;
+    } finally {
+        iso.flush();
+    }
+
+    const track = (info as import('mp4box').Movie | null)?.videoTracks?.[0];
+    if (!track?.nb_samples || !track.timescale) return null;
+    // samples_duration over duration - the latter can include edit lists
+    const ticks = track.samples_duration || track.duration;
+    if (!ticks) return null;
+
+    const fps = track.nb_samples / (ticks / track.timescale);
+    return Number.isFinite(fps) && fps >= 1 && fps <= 240 ? fps : null;
+}
+
 /** Read duration + resolution from a File locally via a throwaway <video>. */
-export function probeVideoMeta(file: File): Promise<VideoMeta | null> {
+function probeElementMeta(file: File): Promise<Omit<VideoMeta, 'fps' | 'fpsMeasured'> | null> {
     return new Promise((resolve) => {
         const url = URL.createObjectURL(file);
         const video = document.createElement('video');
         video.preload = 'metadata';
-        const done = (meta: VideoMeta | null) => {
+        const done = (meta: Omit<VideoMeta, 'fps' | 'fpsMeasured'> | null) => {
             URL.revokeObjectURL(url);
             resolve(meta);
         };
@@ -117,4 +163,11 @@ export function probeVideoMeta(file: File): Promise<VideoMeta | null> {
         video.onerror = () => done(null);
         video.src = url;
     });
+}
+
+/** Duration + resolution + frame rate, read locally. */
+export async function probeVideoMeta(file: File): Promise<VideoMeta | null> {
+    const [base, fps] = await Promise.all([probeElementMeta(file), probeFps(file)]);
+    if (!base) return null;
+    return { ...base, fps: fps ?? FALLBACK_FPS, fpsMeasured: fps !== null };
 }

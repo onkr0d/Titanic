@@ -15,6 +15,7 @@ from firebase_admin import credentials
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 
 from fileutils import remove_quietly
+from jobs import metrics
 from jobs.shareable import _X265_PARAMS, build_shareable_copy, fits_target
 
 # Logging configuration note:
@@ -29,6 +30,19 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+# Full-quality encode settings, named so the recorded metrics and the encoder
+# cannot drift apart. A lifetime savings ratio spanning a CRF change is
+# uninterpretable unless each row carries the settings that produced it.
+_ENCODE_CODEC = "libx265"
+_ENCODE_CRF = 22
+_ENCODE_PRESET = "medium"
+_ENCODE_PARAMS = {
+    "codec": _ENCODE_CODEC,
+    "crf": _ENCODE_CRF,
+    "preset": _ENCODE_PRESET,
+}
+
 
 def initialize_firebase():
     """
@@ -409,11 +423,11 @@ def _encode_full_quality(source_file: str, output_file: str) -> None:
             "0",
             # video re-encode
             "-c:v",
-            "libx265",
+            _ENCODE_CODEC,
             "-crf",
-            "22",
+            str(_ENCODE_CRF),
             "-preset",
-            "medium",
+            _ENCODE_PRESET,
             # force pools
             "-x265-params",
             _X265_PARAMS,
@@ -452,9 +466,9 @@ def _encode_full_quality(source_file: str, output_file: str) -> None:
         out_opts = {"c:a": "copy", "map": "0", "x265-params": _X265_PARAMS}
         ffmpeg.input(source_file).output(
             output_file,
-            vcodec="libx265",
-            crf=22,
-            preset="medium",
+            vcodec=_ENCODE_CODEC,
+            crf=_ENCODE_CRF,
+            preset=_ENCODE_PRESET,
             **out_opts,
             vtag="hvc1",
             movflags="+faststart",
@@ -462,10 +476,40 @@ def _encode_full_quality(source_file: str, output_file: str) -> None:
         ).run()
 
 
+def _probe_quietly(input_file: str) -> dict:
+    """ffprobe the source for metrics only; never raise, never block the encode."""
+    try:
+        return ffmpeg.probe(input_file)
+    except Exception:
+        logger.debug("Metrics probe failed for %s", input_file, exc_info=True)
+        return {}
+
+
 def compress_video(
     input_file: str,
     target_size_mb: float | None = None,
     keep_full_quality: bool = True,
+) -> list[str]:
+    """Run the transcode pipeline, recording metrics around it best-effort.
+
+    Split from `_compress_video` purely so every exit — including the two raise
+    paths inside — is recorded in one place instead of at each return.
+    """
+    rec = metrics.JobRecord(
+        input_file, probe=_probe_quietly(input_file), target_size_mb=target_size_mb
+    )
+    try:
+        return _compress_video(input_file, target_size_mb, keep_full_quality, rec)
+    except Exception as exc:
+        rec.fail(exc)
+        raise
+
+
+def _compress_video(
+    input_file: str,
+    target_size_mb: float | None,
+    keep_full_quality: bool,
+    rec: metrics.JobRecord,
 ) -> list[str]:
     filename = os.path.basename(input_file)
     output_file = os.path.join(
@@ -502,6 +546,8 @@ def compress_video(
                 remove_quietly(source_file)
         remove_quietly(input_file)
         logger.info(f"Video processing complete: {filename}")
+        # Size-targeted encode, not codec savings — excluded from the ratio.
+        rec.finish(metrics.STATUS_SHAREABLE_ONLY, shareable_output=output_file)
         return [output_file]
 
     if is_h265_video(source_file):
@@ -522,10 +568,18 @@ def compress_video(
             else None
         )
         logger.info(f"Video processing complete: {filename}")
+        # No re-encode happened, so there is no saving to attribute here.
+        rec.finish(
+            metrics.STATUS_SKIPPED_ALREADY_HEVC,
+            full_output=output_file,
+            shareable_output=shareable,
+        )
         return _deliver(output_file, shareable, keep_full_quality)
 
+    encode_started = time.monotonic()
     try:
         _encode_full_quality(source_file, output_file)
+        encode_seconds = time.monotonic() - encode_started
     except Exception:
         # Primary and fallback transcode both failed — drop the partial/corrupt
         # output so it doesn't pile up in compressed/, then re-raise to fail the job.
@@ -560,6 +614,18 @@ def compress_video(
         # Success — the compressed output is in place, so the original upload is no
         # longer needed. Remove it so orphaned files can't accumulate and fill the disk.
         remove_quietly(input_file)
+        # Recorded before _deliver, which may move the capped copy onto
+        # output_file and leave only one of the two paths readable. When the
+        # capped copy becomes the sole deliverable, what shipped is size-targeted
+        # rather than a codec saving, so it must not count as a transcode.
+        capped_only = bool(shareable_file) and not keep_full_quality
+        rec.finish(
+            metrics.STATUS_SHAREABLE_ONLY if capped_only else metrics.STATUS_TRANSCODED,
+            full_output=None if capped_only else output_file,
+            shareable_output=shareable_file,
+            transcode_seconds=encode_seconds,
+            encode_params=_ENCODE_PARAMS,
+        )
     finally:
         # The audio-processed temp is regenerable scratch derived from input_file;
         # always clean it up, on success or failure.

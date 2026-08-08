@@ -31,9 +31,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Full-quality encode settings, named so the recorded metrics and the encoder
-# cannot drift apart. A lifetime savings ratio spanning a CRF change is
-# uninterpretable unless each row carries the settings that produced it.
+# Named so the recorded metrics and the encoder cannot drift apart.
 _ENCODE_CODEC = "libx265"
 _ENCODE_CRF = 22
 _ENCODE_PRESET = "medium"

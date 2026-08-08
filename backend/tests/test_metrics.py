@@ -3,6 +3,7 @@
 Tests breaking an upload, and publishing a wrong ratio.
 """
 
+import logging
 import os
 
 import pytest
@@ -73,6 +74,19 @@ def test_worker_process_initializes_firebase_itself(monkeypatch):
 
     assert metrics._ensure_app() is state["app"]
     assert state["inits"] == 1
+
+
+def test_writes_are_a_clean_no_op_when_firestore_is_absent(pipeline, monkeypatch, caplog):
+    # The shipped-but-disabled path: no credentials, so `_collection()` is None.
+    # `_never_raises` would swallow a real error here and leave a broken no-op
+    # looking healthy, so assert the run was silent rather than merely survivable.
+    monkeypatch.setattr(metrics, "_collection", lambda: None)
+    input_file, output_file, _ = pipeline
+
+    with caplog.at_level(logging.ERROR, logger=metrics.logger.name):
+        assert job.compress_video(input_file) == [output_file]
+
+    assert caplog.records == []
 
 
 def test_failure_reason_never_carries_the_filename(writes, tmp_path):
@@ -227,6 +241,25 @@ def test_aggregate_excludes_everything_that_is_not_a_codec_saving():
     assert result["savings_ratio"] == 0.4
     # Duration still counts for everything that went through the pipeline.
     assert result["hours_of_video"] == 0.08
+
+
+def test_aggregate_survives_malformed_rows():
+    # `aggregate` is what gets quoted, so a half-written or hand-edited document
+    # must be skipped rather than crash the fold or skew the ratio.
+    result = metrics.aggregate(
+        [
+            _job(),
+            _job(source=None, output=None),
+            _job(source="1000", output="600"),
+            _job(source=0, output=0),
+            _job(source=-100, output=50),
+            {},
+        ]
+    )
+    assert result["jobs_total"] == 6
+    assert result["jobs_transcoded"] == 1
+    assert result["savings_ratio"] == 0.4
+    assert result["source_bytes_total"] == 1000
 
 
 def test_aggregate_of_nothing_is_zero_not_a_crash():

@@ -24,7 +24,6 @@ def no_firestore(monkeypatch):
     sizes straight into production. Every test that wants writes fakes the
     collection itself.
     """
-    metrics._collection.cache_clear()
     monkeypatch.setattr(metrics, "_collection", lambda: None)
 
 

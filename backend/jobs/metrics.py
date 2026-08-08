@@ -54,30 +54,28 @@ def _ensure_app():
         return firebase_admin.get_app()
 
 
-@functools.cache
 def _collection():
     """The metrics collection, or None when Firebase isn't available.
 
-    Cached because the answer is a property of the process, not of the job, and
-    because it decides whether to pay for a Firebase init.
+    Deliberately uncached: RQ forks a work horse per job, so a cache would never
+    survive to a second use, and caching a None would disable metrics for the
+    rest of the process the day this runs on a worker that doesn't fork.
+    `firestore.client()` is memoized per app, so there's nothing left to save.
     """
     try:
         _ensure_app()
 
-        # Imported only once an app exists: google-cloud-firestore is a ~4s
+        # Imported only once an app exists: google-cloud-firestore is a multi-second
         # import, wasted in processes that will never write a metric.
         from firebase_admin import firestore
 
         return firestore.client().collection(COLLECTION)
     except Exception:
-        # Once per process, and quietly in dev, where no credentials is normal.
-        log = logger.debug if _is_dev() else logger.warning
+        # Quiet in dev, where having no credentials is normal.
+        dev = os.environ.get("IS_DEV", "false").lower() == "true"
+        log = logger.debug if dev else logger.warning
         log("Firestore unavailable; transcode metrics disabled", exc_info=True)
         return None
-
-
-def _is_dev():
-    return os.environ.get("IS_DEV", "false").lower() == "true"
 
 
 def _doc_id(input_file: str) -> str:
@@ -115,11 +113,9 @@ def load_documents() -> list[dict]:
 def aggregate(documents) -> dict:
     """Fold recorded jobs into the numbers worth quoting.
 
-    Only `transcoded` jobs reach the ratio — a size-targeted copy was compressed
-    to a byte budget, a skipped job never re-encoded, a failed one produced
-    nothing. Easy to forget when eyeballing the console, which is why it lives
-    here. The result is whole-pipeline (rnnoise and loudnorm run before the
-    encode), so quote it as such.
+    Only `transcoded` jobs reach the ratio: the others were compressed to a byte
+    budget, never re-encoded, or produced nothing. The result is whole-pipeline
+    (rnnoise and loudnorm run before the encode), so quote it as such.
 
         python -c "import jobs.metrics as m; print(m.aggregate(m.load_documents()))"
     """

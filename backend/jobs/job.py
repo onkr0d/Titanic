@@ -31,6 +31,9 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Bookkeeping runs on every job before any real work; bound it like the metrics write.
+_PROBE_TIMEOUT_SECONDS = 30
+
 # Named so the recorded metrics and the encoder cannot drift apart.
 _ENCODE_CODEC = "libx265"
 _ENCODE_CRF = 22
@@ -476,9 +479,31 @@ def _encode_full_quality(source_file: str, output_file: str) -> None:
 
 
 def _probe_quietly(input_file: str) -> dict:
-    """ffprobe the source for metrics only; never raise, never block the encode."""
+    """ffprobe the source for metrics only; never raise, never stall the job.
+
+    Shelled out rather than via ffmpeg.probe, whose kwargs become ffprobe CLI
+    flags — a `timeout=` there turns into ffprobe's network-protocol option and
+    bounds nothing, while its own `communicate()` has no timeout at all.
+    """
+    cmd = [
+        "ffprobe",
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
+        input_file,
+    ]
     try:
-        return ffmpeg.probe(input_file)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_PROBE_TIMEOUT_SECONDS,
+        )
+        return json.loads(result.stdout)
     except Exception:
         logger.debug("Metrics probe failed for %s", input_file, exc_info=True)
         return {}

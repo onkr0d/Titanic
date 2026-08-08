@@ -107,6 +107,22 @@ def test_writes_cannot_hang_a_transcode(writes, tmp_path):
     assert writes[0]["timeout"] == metrics.WRITE_TIMEOUT_SECONDS
 
 
+def test_the_metrics_probe_cannot_hang_a_transcode(monkeypatch):
+    # Same reasoning, earlier in the job: this probe is pure bookkeeping and runs
+    # before any real work. ffmpeg.probe offers no timeout, which is why this
+    # shells out directly — so assert the bound is actually passed through.
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen.update(kwargs)
+        raise RuntimeError("stalled")
+
+    monkeypatch.setattr(job.subprocess, "run", fake_run)
+
+    assert job._probe_quietly("clip.mp4") == {}
+    assert seen["timeout"] == job._PROBE_TIMEOUT_SECONDS
+
+
 # ── the ratio must not be quietly wrong ──────────────────────────────
 
 
@@ -196,6 +212,58 @@ def test_a_new_upload_reusing_a_freed_name_gets_its_own_document(pipeline, write
     assert metrics.JobRecord(input_file).doc_id != first
 
 
+# ── reusing the metrics probe ────────────────────────────────────────
+
+H264_PROBE = {"streams": [{"codec_type": "video", "codec_name": "h264"}]}
+
+
+@pytest.fixture
+def probed_codecs(pipeline, monkeypatch):
+    """Record the `codec` argument each `is_h265_video` call receives."""
+    seen = []
+    monkeypatch.setattr(job, "_probe_quietly", lambda f: H264_PROBE)
+    monkeypatch.setattr(
+        job, "is_h265_video", lambda f, codec=None: seen.append(codec) or False
+    )
+    return seen
+
+
+def test_probed_codec_is_reused_when_nothing_rewrote_the_source(pipeline, writes, probed_codecs):
+    # The metrics probe already read this file, so the pipeline must not pay for
+    # a second ffprobe of it.
+    job.compress_video(pipeline[0])
+    assert probed_codecs == ["h264"]
+
+
+def test_codec_is_rechecked_when_rnnoise_rewrote_the_source(
+    pipeline, writes, probed_codecs, monkeypatch
+):
+    # The subtle half: rnnoise writes a *new* file, so the probed codec describes
+    # a file the pipeline is no longer looking at. Inverting this guard would
+    # attribute the original's codec to the rewritten source.
+    def fake_rnnoise(input_file, output_file):
+        with open(output_file, "wb") as f:
+            f.write(b"a" * 32)
+        return output_file
+
+    monkeypatch.setattr(job, "process_audio_with_rnnoise", fake_rnnoise)
+
+    job.compress_video(pipeline[0])
+
+    assert probed_codecs == [None]
+
+
+def test_is_h265_video_trusts_a_supplied_codec_instead_of_probing(monkeypatch):
+    monkeypatch.setattr(job, "get_video_codec", lambda f: pytest.fail("should not probe"))
+    assert job.is_h265_video("clip.mp4", "hevc") is True
+    assert job.is_h265_video("clip.mp4", "h264") is False
+
+
+def test_is_h265_video_probes_when_given_no_codec(monkeypatch):
+    monkeypatch.setattr(job, "get_video_codec", lambda f: "hevc")
+    assert job.is_h265_video("clip.mp4") is True
+
+
 # ── aggregation ──────────────────────────────────────────────────────
 
 
@@ -219,7 +287,7 @@ def test_aggregate_known_answer():
         "bytes_saved": 1400,
         "savings_ratio": 0.4667,
         "median_transcode_ratio": 0.55,
-        "hours_of_video": 0.03,
+        "hours_of_video_ingested": 0.03,
     }
 
 
@@ -240,7 +308,7 @@ def test_aggregate_excludes_everything_that_is_not_a_codec_saving():
     assert result["jobs_transcoded"] == 1
     assert result["savings_ratio"] == 0.4
     # Duration still counts for everything that went through the pipeline.
-    assert result["hours_of_video"] == 0.08
+    assert result["hours_of_video_ingested"] == 0.08
 
 
 def test_aggregate_survives_malformed_rows():

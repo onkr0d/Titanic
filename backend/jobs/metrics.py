@@ -153,7 +153,7 @@ def aggregate(documents) -> dict:
         "bytes_saved": saved,
         "savings_ratio": round(saved / source_bytes, 4) if source_bytes else 0.0,
         "median_transcode_ratio": round(statistics.median(ratios), 4) if ratios else 0.0,
-        "hours_of_video": round(seconds / 3600, 2),
+        "hours_of_video_ingested": round(seconds / 3600, 2),
     }
 
 

@@ -393,12 +393,13 @@ def process_audio_with_rnnoise(input_file: str, output_file: str) -> str:
         return None
 
 
-def is_h265_video(input_file: str) -> bool:
+def is_h265_video(input_file: str, codec: str | None = None) -> bool:
     """
     Check if a video file is already encoded in H.265/HEVC.
     Returns True if the video is H.265, False otherwise.
+    Pass `codec` to reuse an existing probe instead of running another ffprobe.
     """
-    codec = get_video_codec(input_file)
+    codec = codec or get_video_codec(input_file)
     if codec:
         # H.265 can be referred to as 'hevc', 'h265', or 'h.265'
         return codec in ["hevc", "h265", "h.265"]
@@ -550,7 +551,9 @@ def _compress_video(
         rec.finish(metrics.STATUS_SHAREABLE_ONLY, shareable_output=output_file)
         return [output_file]
 
-    if is_h265_video(source_file):
+    # rnnoise copies the video stream, but it writes a new file, so only trust the
+    # metrics probe's codec when nothing has been rewritten since.
+    if is_h265_video(source_file, rec.source_codec if source_file == input_file else None):
         logger.info("Video is already H.265, skipping full-quality re-encode")
         if source_file != output_file:
             shutil.move(source_file, output_file)

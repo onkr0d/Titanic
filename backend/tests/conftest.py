@@ -11,6 +11,21 @@ import os
 import pytest
 
 import jobs.job as job
+import jobs.metrics as metrics
+
+
+@pytest.fixture(autouse=True)
+def no_firestore(monkeypatch):
+    """Hard stop between the tests and the real metrics collection.
+
+    A dev checkout has working service-account credentials at
+    admin-sdk-cred.json, and `_collection()` initializes Firebase itself when
+    nothing else has — so an unguarded `compress_video` test writes its fixture
+    sizes straight into production. Every test that wants writes fakes the
+    collection itself.
+    """
+    metrics._collection.cache_clear()
+    monkeypatch.setattr(metrics, "_collection", lambda: None)
 
 
 @pytest.fixture
@@ -45,7 +60,7 @@ def pipeline(tmp_path, monkeypatch):
 
     monkeypatch.setattr(job, "process_audio_with_rnnoise", lambda i, o: None)
     monkeypatch.setattr(job, "_probe_quietly", lambda f: {})
-    monkeypatch.setattr(job, "is_h265_video", lambda f: False)
+    monkeypatch.setattr(job, "is_h265_video", lambda f, codec=None: False)
     monkeypatch.setattr(job, "_encode_full_quality", fake_full)
     monkeypatch.setattr(job, "build_shareable_copy", fake_shareable)
     return str(input_file), str(output_file), calls

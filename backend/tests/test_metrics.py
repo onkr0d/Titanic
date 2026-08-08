@@ -53,6 +53,39 @@ def test_metrics_failure_does_not_fail_the_upload(pipeline, monkeypatch):
     assert os.path.exists(output_file)
 
 
+def test_worker_process_initializes_firebase_itself(monkeypatch):
+    # The app initializes Firebase; RQ workers are separate processes that never
+    # do, and `compress_video` runs in one. Without this, `get_app()` raises for
+    # every job, the collection is always None, and nothing is ever recorded.
+    state = {"app": None, "inits": 0}
+
+    def fake_get_app():
+        if state["app"] is None:
+            raise ValueError("The default Firebase app does not exist.")
+        return state["app"]
+
+    def fake_initialize():
+        state["inits"] += 1
+        state["app"] = object()
+
+    monkeypatch.setattr(metrics.firebase_admin, "get_app", fake_get_app)
+    monkeypatch.setattr(job, "initialize_firebase", fake_initialize)
+
+    assert metrics._ensure_app() is state["app"]
+    assert state["inits"] == 1
+
+
+def test_failure_reason_never_carries_the_filename(writes, tmp_path):
+    # Exception messages embed the upload path; CalledProcessError stringifies the
+    # whole argv. Firestore gets the class name only.
+    path = str(tmp_path / "brothers wedding speech.mp4")
+    metrics.JobRecord(path).fail(RuntimeError(f"ffmpeg failed on {path}"))
+
+    doc = document(writes)
+    assert doc["failure_reason"] == "RuntimeError"
+    assert not any("wedding" in str(value) for value in doc.values())
+
+
 def test_writes_cannot_hang_a_transcode(writes, tmp_path):
     # A try/except catches a Firestore error but not a stalled call, which would
     # add minutes to every job. The timeout is the only thing preventing that.
@@ -81,7 +114,7 @@ def test_transcoded_records_both_sides(pipeline, writes):
 
 
 def test_already_hevc_is_not_counted_as_a_saving(pipeline, writes, monkeypatch):
-    monkeypatch.setattr(job, "is_h265_video", lambda f: True)
+    monkeypatch.setattr(job, "is_h265_video", lambda f, codec=None: True)
     job.compress_video(pipeline[0])
     assert document(writes)["status"] == metrics.STATUS_SKIPPED_ALREADY_HEVC
 
@@ -122,19 +155,31 @@ def test_failed_encode_records_failure_and_still_raises(pipeline, writes, monkey
     assert document(writes)["status"] == metrics.STATUS_FAILED
 
 
-def test_reprocessing_updates_one_document(pipeline, writes):
-    # RQ mints a fresh job id per enqueue, so the document id is derived from the
-    # upload path instead. Without that a re-processed upload double-counts.
+def test_reprocessing_the_same_upload_updates_one_document(pipeline, writes):
+    # RQ mints a fresh job id per enqueue, so the id is derived from the upload
+    # itself. Without that a re-processed upload double-counts.
+    input_file, _, _ = pipeline
+    first = metrics.JobRecord(input_file).doc_id
+
+    assert metrics.JobRecord(input_file).doc_id == first
+    job.compress_video(input_file)
+    assert all(w["merge"] for w in writes)
+
+
+def test_a_new_upload_reusing_a_freed_name_gets_its_own_document(pipeline, writes):
+    # The other half of the same rule. Uploads are uniquified only while the
+    # previous file exists, and the pipeline deletes it — so the next `clip.mp4`
+    # is a different video, and keying on the path alone would silently overwrite
+    # the first job's row.
     input_file, _, _ = pipeline
     first = metrics.JobRecord(input_file).doc_id
     job.compress_video(input_file)
+    assert not os.path.exists(input_file)
 
-    with open(input_file, "wb") as f:  # the pipeline deleted the original
-        f.write(b"i" * 64)
-    job.compress_video(input_file)
+    with open(input_file, "wb") as f:
+        f.write(b"i" * 4096)
 
-    assert metrics.JobRecord(input_file).doc_id == first
-    assert all(w["merge"] for w in writes)
+    assert metrics.JobRecord(input_file).doc_id != first
 
 
 # ── aggregation ──────────────────────────────────────────────────────

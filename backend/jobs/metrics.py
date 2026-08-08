@@ -9,7 +9,7 @@ import hashlib
 import logging
 import os
 import statistics
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import firebase_admin
 
@@ -38,20 +38,63 @@ def _never_raises(func):
     return wrapper
 
 
-def _collection():
-    """The metrics collection, or None when Firebase isn't available."""
-    try:
-        # `get_app()` raises when never initialized — the normal dev/CI case.
-        # Checking before the import keeps google-cloud-firestore, a ~4s import,
-        # out of processes that will never write a metric.
-        firebase_admin.get_app()
+def _ensure_app():
+    """The Firebase app, initializing it if this process hasn't.
 
+    `get_app()` raises when never initialized — the dev/CI case, but also every
+    RQ worker, which is a separate process from the app that initializes Firebase
+    and does not initialize it itself.
+    """
+    try:
+        return firebase_admin.get_app()
+    except ValueError:
+        from jobs.job import initialize_firebase
+
+        initialize_firebase()
+        return firebase_admin.get_app()
+
+
+@functools.cache
+def _collection():
+    """The metrics collection, or None when Firebase isn't available.
+
+    Cached because the answer is a property of the process, not of the job, and
+    because it decides whether to pay for a Firebase init.
+    """
+    try:
+        _ensure_app()
+
+        # Imported only once an app exists: google-cloud-firestore is a ~4s
+        # import, wasted in processes that will never write a metric.
         from firebase_admin import firestore
 
         return firestore.client().collection(COLLECTION)
     except Exception:
-        logger.debug("Firestore unavailable; transcode metrics disabled", exc_info=True)
+        # Once per process, and quietly in dev, where no credentials is normal.
+        log = logger.debug if _is_dev() else logger.warning
+        log("Firestore unavailable; transcode metrics disabled", exc_info=True)
         return None
+
+
+def _is_dev():
+    return os.environ.get("IS_DEV", "false").lower() == "true"
+
+
+def _doc_id(input_file: str) -> str:
+    """Keyed on the upload's identity, not just its name.
+
+    Uploads are uniquified only while the previous file exists, and the pipeline
+    deletes it — so a later upload can reuse a freed name and would otherwise
+    overwrite that job's row. Size and mtime separate them, while a re-enqueue of
+    the same file on disk still dedupes onto one document.
+    """
+    key = os.fsencode(input_file)
+    try:
+        stat = os.stat(input_file)
+        key += b"|%d|%d" % (stat.st_size, stat.st_mtime_ns)
+    except OSError:
+        pass
+    return hashlib.sha256(key).hexdigest()
 
 
 def _size_or_none(path):
@@ -63,17 +106,22 @@ def _size_or_none(path):
         return None
 
 
+def load_documents() -> list[dict]:
+    """Every recorded job. Empty when Firestore isn't reachable."""
+    collection = _collection()
+    return [d.to_dict() for d in collection.stream()] if collection else []
+
+
 def aggregate(documents) -> dict:
-    """Fold recorded jobs into the numbers the site publishes.
+    """Fold recorded jobs into the numbers worth quoting.
 
     Only `transcoded` jobs reach the ratio — a size-targeted copy was compressed
     to a byte budget, a skipped job never re-encoded, a failed one produced
     nothing. Easy to forget when eyeballing the console, which is why it lives
     here. The result is whole-pipeline (rnnoise and loudnorm run before the
-    encode), so publish it as such.
+    encode), so quote it as such.
 
-        initialize_firebase()
-        aggregate(d.to_dict() for d in _collection().stream())
+        python -c "import jobs.metrics as m; print(m.aggregate(m.load_documents()))"
     """
     total = transcoded = source_bytes = output_bytes = 0
     seconds = 0.0
@@ -89,8 +137,8 @@ def aggregate(documents) -> dict:
         source, output = doc.get("source_bytes"), doc.get("full_output_bytes")
         if (
             doc.get("status") != STATUS_TRANSCODED
-            or not isinstance(source, int)
-            or not isinstance(output, int)
+            or not isinstance(source, (int, float))
+            or not isinstance(output, (int, float))
             or source <= 0
         ):
             continue
@@ -121,14 +169,15 @@ class JobRecord:
     """
 
     def __init__(self, input_file: str, probe=None, target_size_mb=None):
-        self.doc_id = hashlib.sha256(os.fsencode(input_file)).hexdigest()
+        self.doc_id = _doc_id(input_file)
+        self.source_codec = None
         self._fields = {}
         self._capture_source(input_file, probe, target_size_mb)
 
     @_never_raises
     def _capture_source(self, input_file, probe, target_size_mb):
         self._fields = {
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
             "source_bytes": _size_or_none(input_file),
             "target_size_mb": target_size_mb,
         }
@@ -139,9 +188,10 @@ class JobRecord:
             {},
         )
         codec = stream.get("codec_name")
+        self.source_codec = codec.lower() if codec else None
         self._fields.update(
             {
-                "source_codec": codec.lower() if codec else None,
+                "source_codec": self.source_codec,
                 "width": stream.get("width"),
                 "height": stream.get("height"),
                 "duration_seconds": _float_or_none((probe or {}).get("format", {}).get("duration")),
@@ -160,8 +210,14 @@ class JobRecord:
         )
 
     @_never_raises
-    def finish(self, status, full_output=None, shareable_output=None,
-               transcode_seconds=None, encode_params=None):
+    def finish(
+        self,
+        status,
+        full_output=None,
+        shareable_output=None,
+        transcode_seconds=None,
+        encode_params=None,
+    ):
         self._write(
             {
                 "status": status,

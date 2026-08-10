@@ -87,41 +87,7 @@ def test_duration_and_audio_count():
 # ── compress_video artifact plan ─────────────────────────────────────
 
 
-@pytest.fixture
-def pipeline(tmp_path, monkeypatch):
-    """Fake out ffmpeg-heavy steps; return (input_file, output_file, calls)."""
-    uncompressed = tmp_path / "uncompressed"
-    uncompressed.mkdir()
-    (tmp_path / "compressed").mkdir()
-    input_file = uncompressed / "clip.mp4"
-    input_file.write_bytes(b"i" * 64)
-    output_file = tmp_path / "compressed" / "clip.mp4"
-
-    calls = {"full": 0, "shareable": []}
-
-    def fake_full(source, output):
-        calls["full"] += 1
-        with open(output, "wb") as f:
-            f.write(b"f" * 64)
-
-    def fake_shareable(
-        source, target, dest_dir, output_basename=None, *, dest_file=None, preserve_streams=False
-    ):
-        calls["shareable"].append(
-            {"source": source, "dest_file": dest_file, "preserve": preserve_streams}
-        )
-        if dest_file is None:
-            stem, ext = os.path.splitext(output_basename or os.path.basename(source))
-            dest_file = os.path.join(dest_dir, f"{stem}_{int(target)}MB{ext}")
-        with open(dest_file, "wb") as f:
-            f.write(b"s" * 16)
-        return dest_file
-
-    monkeypatch.setattr(job, "process_audio_with_rnnoise", lambda i, o: None)
-    monkeypatch.setattr(job, "is_h265_video", lambda f: False)
-    monkeypatch.setattr(job, "_encode_full_quality", fake_full)
-    monkeypatch.setattr(job, "build_shareable_copy", fake_shareable)
-    return str(input_file), str(output_file), calls
+# The `pipeline` fixture lives in conftest.py; test_metrics.py uses it too.
 
 
 def test_no_target_single_artifact(pipeline, monkeypatch):

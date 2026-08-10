@@ -1,0 +1,337 @@
+"""Transcode metrics.
+
+Tests breaking an upload, and publishing a wrong ratio.
+"""
+
+import logging
+import os
+
+import pytest
+
+import jobs.job as job
+import jobs.metrics as metrics
+
+
+class _FakeCollection:
+    """Captures writes instead of holding a Firestore client."""
+
+    def __init__(self, writes):
+        self.writes = writes
+
+    def document(self, doc_id):
+        return self
+
+    def set(self, fields, merge=False, timeout=None):
+        self.writes.append({"fields": fields, "merge": merge, "timeout": timeout})
+
+
+@pytest.fixture
+def writes(monkeypatch):
+    captured = []
+    monkeypatch.setattr(metrics, "_collection", lambda: _FakeCollection(captured))
+    return captured
+
+
+def document(writes):
+    assert len(writes) == 1, f"expected one write per job, got {len(writes)}"
+    return writes[0]["fields"]
+
+
+# ── it must not break an upload ──────────────────────────────────────
+
+
+def test_metrics_failure_does_not_fail_the_upload(pipeline, monkeypatch):
+    # The one that actually costs a user something: a metrics table is not worth
+    # dropping a video over. Covers every entry point, since they all write.
+    class Exploding:
+        def document(self, _id):
+            raise RuntimeError("firestore is down")
+
+    monkeypatch.setattr(metrics, "_collection", lambda: Exploding())
+    input_file, output_file, _ = pipeline
+
+    assert job.compress_video(input_file) == [output_file]
+    assert os.path.exists(output_file)
+
+
+def test_worker_process_initializes_firebase_itself(monkeypatch):
+    # The app initializes Firebase; RQ workers are separate processes that never
+    # do, and `compress_video` runs in one. Without this, `get_app()` raises for
+    # every job, the collection is always None, and nothing is ever recorded.
+    state = {"app": None, "inits": 0}
+
+    def fake_get_app():
+        if state["app"] is None:
+            raise ValueError("The default Firebase app does not exist.")
+        return state["app"]
+
+    def fake_initialize():
+        state["inits"] += 1
+        state["app"] = object()
+
+    monkeypatch.setattr(metrics.firebase_admin, "get_app", fake_get_app)
+    monkeypatch.setattr(job, "initialize_firebase", fake_initialize)
+
+    assert metrics._ensure_app() is state["app"]
+    assert state["inits"] == 1
+
+
+def test_writes_are_a_clean_no_op_when_firestore_is_absent(pipeline, monkeypatch, caplog):
+    # The shipped-but-disabled path: no credentials, so `_collection()` is None.
+    # `_never_raises` would swallow a real error here and leave a broken no-op
+    # looking healthy, so assert the run was silent rather than merely survivable.
+    monkeypatch.setattr(metrics, "_collection", lambda: None)
+    input_file, output_file, _ = pipeline
+
+    with caplog.at_level(logging.ERROR, logger=metrics.logger.name):
+        assert job.compress_video(input_file) == [output_file]
+
+    assert caplog.records == []
+
+
+def test_failure_reason_never_carries_the_filename(writes, tmp_path):
+    # Exception messages embed the upload path; CalledProcessError stringifies the
+    # whole argv. Firestore gets the class name only.
+    path = str(tmp_path / "brothers wedding speech.mp4")
+    metrics.JobRecord(path).fail(RuntimeError(f"ffmpeg failed on {path}"))
+
+    doc = document(writes)
+    assert doc["failure_reason"] == "RuntimeError"
+    assert not any("wedding" in str(value) for value in doc.values())
+
+
+def test_writes_cannot_hang_a_transcode(writes, tmp_path):
+    # A try/except catches a Firestore error but not a stalled call, which would
+    # add minutes to every job. The timeout is the only thing preventing that.
+    metrics.JobRecord(str(tmp_path / "clip.mp4")).finish(metrics.STATUS_TRANSCODED)
+    assert writes[0]["timeout"] == metrics.WRITE_TIMEOUT_SECONDS
+
+
+def test_the_metrics_probe_cannot_hang_a_transcode(monkeypatch):
+    # Same reasoning, earlier in the job: this probe is pure bookkeeping and runs
+    # before any real work. ffmpeg.probe offers no timeout, which is why this
+    # shells out directly — so assert the bound is actually passed through.
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen.update(kwargs)
+        raise RuntimeError("stalled")
+
+    monkeypatch.setattr(job.subprocess, "run", fake_run)
+
+    assert job._probe_quietly("clip.mp4") == {}
+    assert seen["timeout"] == job._PROBE_TIMEOUT_SECONDS
+
+
+# ── the ratio must not be quietly wrong ──────────────────────────────
+
+
+def test_transcoded_records_both_sides(pipeline, writes):
+    input_file, _, _ = pipeline
+    # Distinct sizes, so a swapped source/output assignment fails here.
+    with open(input_file, "wb") as f:
+        f.write(b"i" * 100)
+
+    job.compress_video(input_file)
+
+    doc = document(writes)
+    assert doc["status"] == metrics.STATUS_TRANSCODED
+    # Read before the pipeline deleted the original — the reason the source side
+    # is captured at construction rather than at finish.
+    assert doc["source_bytes"] == 100
+    assert doc["full_output_bytes"] == 64
+    assert doc["encode_params"] == job._ENCODE_PARAMS
+
+
+def test_already_hevc_is_not_counted_as_a_saving(pipeline, writes, monkeypatch):
+    monkeypatch.setattr(job, "is_h265_video", lambda f, codec=None: True)
+    job.compress_video(pipeline[0])
+    assert document(writes)["status"] == metrics.STATUS_SKIPPED_ALREADY_HEVC
+
+
+def test_size_targeted_encode_is_not_counted_as_a_saving(pipeline, writes, monkeypatch):
+    monkeypatch.setattr(job, "fits_target", lambda p, t: False)
+    job.compress_video(pipeline[0], 10, keep_full_quality=False)
+    assert document(writes)["status"] == metrics.STATUS_SHAREABLE_ONLY
+
+
+def test_capped_copy_replacing_the_full_encode_is_not_counted_as_a_saving(
+    pipeline, writes, monkeypatch
+):
+    # The branch that is easy to get wrong: the full encode runs, overshoots the
+    # target, and the capped copy replaces it as the sole deliverable. What
+    # shipped is size-targeted, so counting it as codec savings inflates the
+    # ratio — and this path *looks* like a normal transcode from the outside.
+    input_file, _, calls = pipeline
+    monkeypatch.setattr(job, "fits_target", lambda p, t: p == input_file)
+
+    job.compress_video(input_file, 10, keep_full_quality=False)
+
+    assert calls["full"] == 1
+    doc = document(writes)
+    assert doc["status"] == metrics.STATUS_SHAREABLE_ONLY
+    # Recorded before _deliver moved the copy onto output_file.
+    assert doc["shareable_output_bytes"] == 16
+
+
+def test_failed_encode_records_failure_and_still_raises(pipeline, writes, monkeypatch):
+    def boom(source, output):
+        raise RuntimeError("encode failed")
+
+    monkeypatch.setattr(job, "_encode_full_quality", boom)
+    with pytest.raises(RuntimeError):
+        job.compress_video(pipeline[0])
+
+    assert document(writes)["status"] == metrics.STATUS_FAILED
+
+
+def test_reprocessing_the_same_upload_updates_one_document(pipeline, writes):
+    # RQ mints a fresh job id per enqueue, so the id is derived from the upload
+    # itself. Without that a re-processed upload double-counts.
+    input_file, _, _ = pipeline
+    first = metrics.JobRecord(input_file).doc_id
+
+    assert metrics.JobRecord(input_file).doc_id == first
+    job.compress_video(input_file)
+    assert all(w["merge"] for w in writes)
+
+
+def test_a_new_upload_reusing_a_freed_name_gets_its_own_document(pipeline, writes):
+    # The other half of the same rule. Uploads are uniquified only while the
+    # previous file exists, and the pipeline deletes it — so the next `clip.mp4`
+    # is a different video, and keying on the path alone would silently overwrite
+    # the first job's row.
+    input_file, _, _ = pipeline
+    first = metrics.JobRecord(input_file).doc_id
+    job.compress_video(input_file)
+    assert not os.path.exists(input_file)
+
+    with open(input_file, "wb") as f:
+        f.write(b"i" * 4096)
+
+    assert metrics.JobRecord(input_file).doc_id != first
+
+
+# ── reusing the metrics probe ────────────────────────────────────────
+
+H264_PROBE = {"streams": [{"codec_type": "video", "codec_name": "h264"}]}
+
+
+@pytest.fixture
+def probed_codecs(pipeline, monkeypatch):
+    """Record the `codec` argument each `is_h265_video` call receives."""
+    seen = []
+    monkeypatch.setattr(job, "_probe_quietly", lambda f: H264_PROBE)
+    monkeypatch.setattr(
+        job, "is_h265_video", lambda f, codec=None: seen.append(codec) or False
+    )
+    return seen
+
+
+def test_probed_codec_is_reused_when_nothing_rewrote_the_source(pipeline, writes, probed_codecs):
+    # The metrics probe already read this file, so the pipeline must not pay for
+    # a second ffprobe of it.
+    job.compress_video(pipeline[0])
+    assert probed_codecs == ["h264"]
+
+
+def test_codec_is_rechecked_when_rnnoise_rewrote_the_source(
+    pipeline, writes, probed_codecs, monkeypatch
+):
+    # The subtle half: rnnoise writes a *new* file, so the probed codec describes
+    # a file the pipeline is no longer looking at. Inverting this guard would
+    # attribute the original's codec to the rewritten source.
+    def fake_rnnoise(input_file, output_file):
+        with open(output_file, "wb") as f:
+            f.write(b"a" * 32)
+        return output_file
+
+    monkeypatch.setattr(job, "process_audio_with_rnnoise", fake_rnnoise)
+
+    job.compress_video(pipeline[0])
+
+    assert probed_codecs == [None]
+
+
+def test_is_h265_video_trusts_a_supplied_codec_instead_of_probing(monkeypatch):
+    monkeypatch.setattr(job, "get_video_codec", lambda f: pytest.fail("should not probe"))
+    assert job.is_h265_video("clip.mp4", "hevc") is True
+    assert job.is_h265_video("clip.mp4", "h264") is False
+
+
+def test_is_h265_video_probes_when_given_no_codec(monkeypatch):
+    monkeypatch.setattr(job, "get_video_codec", lambda f: "hevc")
+    assert job.is_h265_video("clip.mp4") is True
+
+
+# ── aggregation ──────────────────────────────────────────────────────
+
+
+def _job(status=metrics.STATUS_TRANSCODED, source=1000, output=600, duration=60.0):
+    return {
+        "status": status,
+        "source_bytes": source,
+        "full_output_bytes": output,
+        "duration_seconds": duration,
+    }
+
+
+def test_aggregate_known_answer():
+    # 1000->600 and 2000->1000: saved 1400 of 3000 = 46.67%. Per-job ratios 0.6
+    # and 0.5, median 0.55. 120s = 0.03h.
+    assert metrics.aggregate([_job(), _job(source=2000, output=1000)]) == {
+        "jobs_total": 2,
+        "jobs_transcoded": 2,
+        "source_bytes_total": 3000,
+        "output_bytes_total": 1600,
+        "bytes_saved": 1400,
+        "savings_ratio": 0.4667,
+        "median_transcode_ratio": 0.55,
+        "hours_of_video_ingested": 0.03,
+    }
+
+
+def test_aggregate_excludes_everything_that_is_not_a_codec_saving():
+    # The rule the whole feature rests on. A shareable copy compressed to a byte
+    # budget would otherwise report a 99% saving; a job that died between accept
+    # and finish has no output and would report 100%.
+    result = metrics.aggregate(
+        [
+            _job(),
+            _job(status=metrics.STATUS_SHAREABLE_ONLY, source=9000, output=100),
+            _job(status=metrics.STATUS_SKIPPED_ALREADY_HEVC, source=9000, output=9000),
+            _job(status=metrics.STATUS_FAILED, output=None),
+            _job(output=None),
+        ]
+    )
+    assert result["jobs_total"] == 5
+    assert result["jobs_transcoded"] == 1
+    assert result["savings_ratio"] == 0.4
+    # Duration still counts for everything that went through the pipeline.
+    assert result["hours_of_video_ingested"] == 0.08
+
+
+def test_aggregate_survives_malformed_rows():
+    # `aggregate` is what gets quoted, so a half-written or hand-edited document
+    # must be skipped rather than crash the fold or skew the ratio.
+    result = metrics.aggregate(
+        [
+            _job(),
+            _job(source=None, output=None),
+            _job(source="1000", output="600"),
+            _job(source=0, output=0),
+            _job(source=-100, output=50),
+            {},
+        ]
+    )
+    assert result["jobs_total"] == 6
+    assert result["jobs_transcoded"] == 1
+    assert result["savings_ratio"] == 0.4
+    assert result["source_bytes_total"] == 1000
+
+
+def test_aggregate_of_nothing_is_zero_not_a_crash():
+    # Day one, and any time the ratio is published before a transcode lands.
+    result = metrics.aggregate([])
+    assert result["savings_ratio"] == 0.0
+    assert result["median_transcode_ratio"] == 0.0

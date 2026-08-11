@@ -4,7 +4,7 @@ Securely upload videos from a website to your own media server (with bells and w
 
 ## Overview
 
-Titanic was made to solve a personal problem: sharing media (videos) from a home server with a low tech person. The idea is to allow someone to intuitively upload videos to a private  media server without exposing anything to the network. Oh, and there's some nice sauce like h264 -> h265 conversion; plus some audio processing.
+Titanic was made to solve a personal problem: sharing media (videos) from a home server with a low tech person. The idea is to allow someone to intuitively upload videos to a private  media server without exposing anything to the network. Oh, and there's some nice sauce like h264 -> h265 conversion; mic denoising, and a file size limiter for Discord sharing.
 
 The frontend is React + Vite on Firebase; Backend is Quart + Hypercorn for http3 and request streaming; Media server component is Rust w/Axum + Tokio to reduce strain on my home server hardware, plus I was inspired after taking [Nathan Mull](https://nmmull.github.io/#Top3BUProfIMO)'s CS 392 M1: Rust, in Practice and in Theory @ BU. Shipped with Sentry so I can keep an eye on things.
 

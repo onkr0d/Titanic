@@ -20,7 +20,7 @@ export interface SizeTier {
 
 // Discord's current upload ceilings by tier. Values are the shareable caps.
 export const DISCORD_TIERS: SizeTier[] = [
-    { label: '10 MB', mb: 10, note: 'Free' },
+    { label: '20 MB', mb: 20, note: 'Free' },
     { label: '50 MB', mb: 50, note: 'Nitro Basic' },
     { label: '500 MB', mb: 500, note: 'Nitro' },
 ];

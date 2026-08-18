@@ -5,7 +5,11 @@ tagline: Sink files to your Umbrel
 icon: http://ivans-mac:3000/titanic-icon-4.png
 category: Development
 version: "1.0.0"
-port: 3029
+# The port Umbrel's app_proxy serves. This is the settings listener, which is
+# deliberately NOT published to the host — app_proxy reaches it over the app
+# network and is what authenticates access to it. The upload API lives on 3029,
+# which IS published (tailnet-only) for the VPS.
+port: 3031
 description: >-
   Titanic is a complete video upload and compression system that allows users to upload videos through a web interface, compress them on a backend server, and automatically upload them to an Umbrel device running Plex.
 developer: Ivan
@@ -34,7 +38,7 @@ permissions:
 app_proxy:
   default:
     container: app
-    port: 3029
+    port: 3031
     path: /
     initialCheck:
       path: /health

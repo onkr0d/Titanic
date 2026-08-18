@@ -1,7 +1,9 @@
 services:
   app:
     image: ghcr.io/onkr0d/titanic/trimmer:latest
-    user: "0:0"
+    # Matches the non-root user baked into the Dockerfile. Was "0:0", which
+    # silently discarded that hardening.
+    user: "1000:1000"
     restart: unless-stopped
     # no published ports on purpose: the app has no auth; Umbrel's app_proxy provides it
     environment:

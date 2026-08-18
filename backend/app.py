@@ -275,6 +275,14 @@ async def verify_app_check() -> None:
         # If verify_token() succeeds, okay to continue to route handler.
     except (ValueError, jwt.exceptions.DecodeError):
         abort(401)
+    except Exception:
+        # Anything else (e.g. a transport error fetching Google's keys) is not a
+        # bad token — it's us being unable to decide. Previously this escaped as a
+        # 500, taking the whole API down on a Google-side hiccup. Reject the
+        # request (fail closed) but log it, so the cause is visible rather than
+        # buried in a generic 500.
+        logger.exception("App Check verification errored; rejecting request")
+        abort(401)
 
 
 def allowed_file(filename):

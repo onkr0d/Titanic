@@ -4,6 +4,10 @@
 set -euo pipefail
 
 UMBREL_URL="http://localhost:3029"
+# The settings listener. In production this port has no host mapping — it is
+# reachable only through Umbrel's authenticated app_proxy — so these two URLs
+# represent two different trust levels, not two paths to the same thing.
+SETTINGS_URL="http://localhost:3031"
 QUART_URL="http://localhost:6969"
 PASS=0
 FAIL=0
@@ -50,30 +54,53 @@ body=$(curl -sf "$UMBREL_URL/api/folders")
 echo "$body" | grep -q '"folders"' && pass "GET /api/folders has 'folders' key" || fail "GET /api/folders body" "missing 'folders'"
 
 # Settings GET
-status=$(curl -s -o /dev/null -w "%{http_code}" "$UMBREL_URL/api/settings")
-[ "$status" = "200" ] && pass "GET /api/settings → 200" || fail "GET /api/settings" "got $status"
+status=$(curl -s -o /dev/null -w "%{http_code}" "$SETTINGS_URL/api/settings")
+[ "$status" = "200" ] && pass "GET /api/settings (settings port) → 200" || fail "GET /api/settings" "got $status"
 
-# Settings PUT — valid
+# Valid settings write
 status=$(curl -s -o /dev/null -w "%{http_code}" \
-    -X PUT "$UMBREL_URL/api/settings" \
+    -X PUT "$SETTINGS_URL/api/settings" \
     -H "Content-Type: application/json" \
-    -d '{"sentry_traces_sample_rate": 0.5, "default_folder": "TestFolder"}')
+    -d '{"sentry_traces_sample_rate":0.5,"default_folder":"E2ETestFolder","sentry_dsn":"https://e2e@sentry.io/1"}')
 [ "$status" = "200" ] && pass "PUT /api/settings (valid) → 200" || fail "PUT /api/settings" "got $status"
 
-# Settings PUT — invalid rate
+# Invalid sample rate is still rejected
+status=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X PUT "$SETTINGS_URL/api/settings" \
+    -H "Content-Type: application/json" \
+    -d '{"sentry_traces_sample_rate":5.0}')
+[ "$status" = "400" ] && pass "PUT /api/settings (invalid rate) → 400" || fail "PUT /api/settings invalid" "got $status"
+
+body=$(curl -sf "$SETTINGS_URL/api/settings")
+echo "$body" | grep -q '"default_folder"' && pass "GET /api/settings persisted default_folder" || fail "GET /api/settings body" "missing 'default_folder'"
+
+# Settings page is served on the settings port
+status=$(curl -s -o /dev/null -w "%{http_code}" "$SETTINGS_URL/settings")
+[ "$status" = "200" ] && pass "GET /settings (settings port) → 200 (HTML)" || fail "GET /settings" "got $status"
+
+# ── Listener split ─────────────────────────────────────────────────
+# The whole point of the two-listener design: the settings page and its write
+# API must not be reachable from the port that is published to the tailnet.
+echo ""
+echo "🔒 Listener split (settings must not be on the published port)"
+
+status=$(curl -s -o /dev/null -w "%{http_code}" "$UMBREL_URL/settings")
+[ "$status" = "404" ] && pass "GET /settings on published port → 404" || fail "GET /settings on published port" "expected 404, got $status"
+
 status=$(curl -s -o /dev/null -w "%{http_code}" \
     -X PUT "$UMBREL_URL/api/settings" \
     -H "Content-Type: application/json" \
-    -d '{"sentry_traces_sample_rate": 99.0}')
-[ "$status" = "400" ] && pass "PUT /api/settings (invalid rate) → 400" || fail "PUT /api/settings invalid" "got $status"
+    -d '{"sentry_dsn":"https://attacker@evil.example/1"}')
+[ "$status" = "405" ] && pass "PUT /api/settings on published port → 405" || fail "PUT /api/settings on published port" "expected 405, got $status"
 
-# Settings round-trip: verify the value we PUT was persisted
+# ...and the rejected write must not have landed.
+body=$(curl -sf "$SETTINGS_URL/api/settings")
+echo "$body" | grep -q 'attacker@evil.example' && fail "published-port PUT mutated settings" "DSN was overwritten" || pass "published-port PUT did not mutate settings"
+
+# The published port exposes only the redacted projection: folder yes, DSN no.
 body=$(curl -sf "$UMBREL_URL/api/settings")
-echo "$body" | grep -q '"TestFolder"' && pass "Settings round-trip (default_folder persisted)" || fail "Settings round-trip" "default_folder not found"
-
-# Settings page HTML
-status=$(curl -s -o /dev/null -w "%{http_code}" "$UMBREL_URL/settings")
-[ "$status" = "200" ] && pass "GET /settings → 200 (HTML)" || fail "GET /settings" "got $status"
+echo "$body" | grep -q '"default_folder"' && pass "published /api/settings exposes default_folder" || fail "published /api/settings" "missing 'default_folder'"
+echo "$body" | grep -q 'sentry_dsn' && fail "published /api/settings leaks sentry_dsn" "DSN present in response" || pass "published /api/settings omits sentry_dsn"
 
 # Upload a test video
 echo ""

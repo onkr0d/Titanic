@@ -15,6 +15,7 @@ services:
       - IS_DEV=true
       - DEV_AUTH_BYPASS=true
       - BIND_ADDRESS=0.0.0.0:3029
+      - SETTINGS_BIND_ADDRESS=0.0.0.0:3031
       - PLEX_MEDIA_PATH=/downloads
       - DATA_DIR=/data
     volumes:
@@ -22,6 +23,9 @@ services:
       - test_data:/data
     ports:
       - "3029:3029"
+      # Published only so the e2e script can assert on both listeners. In
+      # production this port is never published; app_proxy reaches it directly.
+      - "3031:3031"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3029/health"]
       interval: 5s

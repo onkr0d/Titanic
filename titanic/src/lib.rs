@@ -58,10 +58,22 @@ impl From<MultipartError> for AppError {
 
 const CONTENT_LENGTH_LIMIT: usize = 20 * 1024 * 1024 * 1024; // 20GB
 
-/// Build the axum router with all routes and middleware.
-/// Extracted from `main()` so integration tests can use it.
-/// State is consumed via `.with_state()`, so the returned router is `Router<()>`.
-pub fn build_router(state: Arc<AppState>) -> Router<()> {
+/// Body limit for the settings listener. It only ever receives a small JSON
+/// document, so it has no business accepting the 20GB the upload port does.
+const SETTINGS_BODY_LIMIT: usize = 64 * 1024; // 64KB
+
+/// Build the tailnet-facing router served on the published port (3029).
+///
+/// Anything that can reach the published port can reach these routes — in
+/// production that is the VPS over Tailscale, and the whole LAN if the tailnet
+/// bind ever falls back. So every route here verifies a Firebase token, and the
+/// settings page plus its read/write API are deliberately absent: they live on
+/// the unpublished listener built by `build_private_router`.
+///
+/// `/api/settings` exists here only as a redacted, read-only projection
+/// (`default_folder` and nothing else) because the VPS's `/api/config` depends
+/// on it. The Sentry DSN never crosses the tailnet.
+pub fn build_public_router(state: Arc<AppState>) -> Router<()> {
     let cors = CorsLayer::new()
         .allow_origin([
             HeaderValue::from_static("https://titanic.ivan.boston"),
@@ -88,13 +100,39 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .route("/api/upload", post(upload_video))
         .route("/api/space", get(space_check))
         .route("/api/folders", get(list_folders))
-        .route("/", get(settings::settings_page))
-        .route("/settings", get(settings::settings_page))
-        .route("/api/settings", get(settings::get_settings).put(settings::put_settings))
+        .route("/api/settings", get(settings::get_public_settings))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(CONTENT_LENGTH_LIMIT))
+        .with_state(state)
+}
+
+/// Build the settings router served on the unpublished port (3031).
+///
+/// `docker-compose.yml` publishes no host mapping for this port, so the only
+/// route to it is Umbrel's app_proxy over the app network — which is already
+/// behind the Umbrel login. That proxy *is* the authentication for these
+/// routes, which is why they carry no token check of their own: the settings
+/// page is plain HTML with no Firebase SDK and no way to mint a token.
+///
+/// The security property this router relies on is therefore a deployment one:
+/// **this port must never appear in a `ports:` mapping.** The route-level half
+/// of that property is pinned by `settings_page_is_absent_from_public_router`
+/// and `public_router_refuses_settings_writes` in tests/integration.rs.
+pub fn build_private_router(state: Arc<AppState>) -> Router<()> {
+    Router::new()
+        // Also served here so Umbrel's app_proxy `initialCheck` (which targets
+        // this port) has something to poll.
+        .route("/health", get(health_check))
+        .route("/", get(settings::settings_page))
+        .route("/settings", get(settings::settings_page))
+        .route("/api/settings", get(settings::get_settings).put(settings::put_settings))
+        // The settings page populates its folder dropdown from this; same data as
+        // the public route, minus the token check the page cannot satisfy.
+        .route("/api/folders", get(list_folders_local))
+        .layer(TraceLayer::new_for_http())
+        .layer(RequestBodyLimitLayer::new(SETTINGS_BODY_LIMIT))
         .with_state(state)
 }
 
@@ -230,9 +268,27 @@ async fn space_check(
     Ok(Json(space_info))
 }
 
+/// `GET /api/folders` on the public listener. The VPS forwards the caller's
+/// Authorization header for this request, so it can verify like any other route.
 async fn list_folders(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
 ) -> Result<Json<FoldersResponse>, AppError> {
+    state.auth.verify_token(&headers).await?;
+
+    folders_response(&state).await
+}
+
+/// `GET /api/folders` on the private listener — no token check, because the
+/// settings page has no way to produce one and app_proxy has already
+/// authenticated the caller. Only ever mounted by `build_private_router`.
+async fn list_folders_local(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<FoldersResponse>, AppError> {
+    folders_response(&state).await
+}
+
+async fn folders_response(state: &AppState) -> Result<Json<FoldersResponse>, AppError> {
     let folders = state.uploader.list_folders().await?;
 
     Ok(Json(FoldersResponse { folders }))

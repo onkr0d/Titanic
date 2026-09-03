@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::State,
-    http::{StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
 use path_clean::PathClean;
@@ -12,6 +12,7 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use crate::AppState;
+use crate::error::AppError;
 
 // ---------------------------------------------------------------------------
 // Settings struct
@@ -137,7 +138,35 @@ pub async fn settings_page() -> impl IntoResponse {
     )
 }
 
+/// The tailnet-facing projection of settings: `default_folder` and nothing else.
+///
+/// The VPS's `/api/config` reads this to seed the upload page's folder picker,
+/// and that is the only field it consumes. Deliberately a separate struct rather
+/// than a filtered `Settings` so that adding a field to `Settings` cannot
+/// silently widen what crosses the tailnet — a new secret would have to be added
+/// here explicitly to leak.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PublicSettings {
+    pub default_folder: Option<String>,
+}
+
+/// `GET /api/settings` on the public listener — redacted view, token required.
+pub async fn get_public_settings(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<PublicSettings>, AppError> {
+    state.auth.verify_token(&headers).await?;
+
+    let path = Settings::file_path(&state.data_dir);
+    let settings = Settings::load(&path);
+
+    Ok(Json(PublicSettings {
+        default_folder: settings.default_folder,
+    }))
+}
+
 /// `GET /api/settings` — return current saved settings as JSON.
+/// Full view including `sentry_dsn`; only mounted on the private router.
 pub async fn get_settings(
     State(state): State<Arc<AppState>>,
 ) -> Json<Settings> {
@@ -146,6 +175,7 @@ pub async fn get_settings(
 }
 
 /// `PUT /api/settings` — save settings and hot-reload Sentry.
+/// Only mounted on the private router; app_proxy is the authentication.
 pub async fn put_settings(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<Settings>,

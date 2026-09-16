@@ -138,19 +138,12 @@ pub async fn settings_page() -> impl IntoResponse {
     )
 }
 
-/// The tailnet-facing projection of settings: `default_folder` and nothing else.
-///
-/// The VPS's `/api/config` reads this to seed the upload page's folder picker,
-/// and that is the only field it consumes. Deliberately a separate struct rather
-/// than a filtered `Settings` so that adding a field to `Settings` cannot
-/// silently widen what crosses the tailnet — a new secret would have to be added
-/// here explicitly to leak.
+/// Separate struct so a new `Settings` field can't leak onto the tailnet.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PublicSettings {
     pub default_folder: Option<String>,
 }
 
-/// `GET /api/settings` on the public listener — redacted view, token required.
 pub async fn get_public_settings(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -166,7 +159,6 @@ pub async fn get_public_settings(
 }
 
 /// `GET /api/settings` — return current saved settings as JSON.
-/// Full view including `sentry_dsn`; only mounted on the private router.
 pub async fn get_settings(
     State(state): State<Arc<AppState>>,
 ) -> Json<Settings> {
@@ -175,7 +167,6 @@ pub async fn get_settings(
 }
 
 /// `PUT /api/settings` — save settings and hot-reload Sentry.
-/// Only mounted on the private router; app_proxy is the authentication.
 pub async fn put_settings(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<Settings>,

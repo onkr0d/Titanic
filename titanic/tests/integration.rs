@@ -20,10 +20,7 @@ fn test_app() -> (Router<()>, tempfile::TempDir) {
     (private, tmp)
 }
 
-/// Build both routers over one shared state, so tests can assert on which
-/// routes each listener actually exposes.
-/// `bypass_auth` mirrors `DEV_AUTH_BYPASS`; set it false to exercise real
-/// token rejection on the public router.
+/// `bypass_auth` mirrors `DEV_AUTH_BYPASS`.
 fn test_apps(bypass_auth: bool) -> (Router<()>, Router<()>, tempfile::TempDir) {
     // Create temp dirs for media and data
     let tmp = tempfile::tempdir().unwrap();
@@ -60,7 +57,6 @@ fn test_apps(bypass_auth: bool) -> (Router<()>, Router<()>, tempfile::TempDir) {
     (public, private, tmp)
 }
 
-/// Convenience: just the tailnet-facing router.
 fn public_app() -> (Router<()>, tempfile::TempDir) {
     let (public, _private, tmp) = test_apps(true);
     (public, tmp)
@@ -209,15 +205,10 @@ async fn get_folders_returns_json() {
 }
 
 
-// ---------------------------------------------------------------------------
-// Listener split: the settings routes must not be reachable from the published
-// port. This is the property that replaces "we assume nobody can reach 3029".
-// ---------------------------------------------------------------------------
+// Listener split: settings routes must not be reachable from the published port.
 
 #[tokio::test]
 async fn settings_page_is_absent_from_public_router() {
-    // Not 401 — 404. These routes are not mounted on the tailnet-facing listener
-    // at all, so no auth bug or missing token check can expose them.
     for uri in ["/", "/settings"] {
         let (app, _tmp) = public_app();
         assert_eq!(
@@ -232,9 +223,7 @@ async fn settings_page_is_absent_from_public_router() {
 async fn public_router_refuses_settings_writes() {
     let (public, private, _tmp) = test_apps(true);
 
-    // 405, not 404: the path exists on the public listener as a GET-only
-    // redacted view, so axum rejects the method before routing to a handler.
-    // What matters is that `put_settings` is not reachable from this listener.
+    // 405: the path exists as a GET-only redacted view
     assert_eq!(
         status_of(
             public,
@@ -246,8 +235,6 @@ async fn public_router_refuses_settings_writes() {
         StatusCode::METHOD_NOT_ALLOWED
     );
 
-    // And prove it: nothing was written. A 405 that still mutated state would
-    // be the actual bug, so assert on the stored settings rather than the code.
     let resp = private
         .oneshot(
             Request::builder()
@@ -290,7 +277,6 @@ async fn private_router_still_serves_settings_page_and_put() {
 async fn public_settings_view_omits_the_sentry_dsn() {
     let (public, private, _tmp) = test_apps(true);
 
-    // Save a DSN through the private router...
     let resp = private
         .oneshot(
             Request::builder()
@@ -306,7 +292,6 @@ async fn public_settings_view_omits_the_sentry_dsn() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
-    // ...and confirm the tailnet-facing view exposes the folder but not the DSN.
     let resp = public
         .oneshot(
             Request::builder()
@@ -342,8 +327,6 @@ async fn public_routes_reject_missing_token_without_the_dev_bypass() {
 
 #[tokio::test]
 async fn health_stays_open_on_both_routers() {
-    // The container healthcheck polls the public port; Umbrel's app_proxy
-    // initialCheck polls the private one. Both must answer without a token.
     let (public, private, _tmp) = test_apps(true);
 
     for app in [public, private] {

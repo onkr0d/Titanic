@@ -54,8 +54,7 @@ services:
     container_name: titanic_umbrel_dev
     ports:
       - "3029:3029"
-      # Settings listener. Published here only because there is no Umbrel
-      # app_proxy in the dev stack; production leaves it unpublished.
+      # settings listener; published only in dev (no app_proxy here)
       - "3031:3031"
     env_file:
       - .env

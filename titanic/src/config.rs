@@ -5,10 +5,7 @@ use std::env;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub bind_address: String,
-    /// Bind address for the settings listener. This port is deliberately NOT
-    /// published to the host in `docker-compose.yml` — Umbrel's authenticated
-    /// app_proxy reaches it over the app network, and nothing else can. Keeping
-    /// it off the published port is what makes the settings page local-only.
+    /// Settings listener; must never be published to the host.
     pub settings_bind_address: String,
     pub firebase_project_id: String,
     pub plex_media_path: String,
@@ -24,9 +21,6 @@ impl Config {
     pub fn from_env() -> Result<Self> {
         let bind_address = env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:3029".to_string());
 
-        // 0.0.0.0 here is safe and required: it is all interfaces *of the container's
-        // network namespace*, which is how app_proxy reaches it. Host exposure is
-        // controlled by the `ports:` list in compose, which omits this port.
         let settings_bind_address =
             env::var("SETTINGS_BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:3031".to_string());
 

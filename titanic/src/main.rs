@@ -56,12 +56,6 @@ async fn main() -> Result<()> {
         sentry_guard,
     });
 
-    // Two listeners, two route sets:
-    //   * public  — published to the tailnet in compose; every route verifies a token.
-    //   * private — no host port mapping; reached only via Umbrel's authenticated
-    //               app_proxy, which is what guards the settings page.
-    // Splitting at the listener means the settings routes cannot be reached from
-    // the published port even if a future route is added carelessly.
     let public_app = titanic::build_public_router(state.clone());
     let private_app = titanic::build_private_router(state);
 
@@ -72,8 +66,6 @@ async fn main() -> Result<()> {
     let public_listener = TcpListener::bind(&bind_addr).await?;
     let private_listener = TcpListener::bind(&settings_bind_addr).await?;
 
-    // If either listener dies the app is broken, so surface the first failure
-    // rather than silently serving half the routes.
     tokio::try_join!(
         async { axum::serve(public_listener, public_app).await },
         async { axum::serve(private_listener, private_app).await },

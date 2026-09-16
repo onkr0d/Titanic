@@ -4,9 +4,6 @@
 set -euo pipefail
 
 UMBREL_URL="http://localhost:3029"
-# The settings listener. In production this port has no host mapping — it is
-# reachable only through Umbrel's authenticated app_proxy — so these two URLs
-# represent two different trust levels, not two paths to the same thing.
 SETTINGS_URL="http://localhost:3031"
 QUART_URL="http://localhost:6969"
 PASS=0
@@ -93,11 +90,9 @@ status=$(curl -s -o /dev/null -w "%{http_code}" \
     -d '{"sentry_dsn":"https://attacker@evil.example/1"}')
 [ "$status" = "405" ] && pass "PUT /api/settings on published port → 405" || fail "PUT /api/settings on published port" "expected 405, got $status"
 
-# ...and the rejected write must not have landed.
 body=$(curl -sf "$SETTINGS_URL/api/settings")
 echo "$body" | grep -q 'attacker@evil.example' && fail "published-port PUT mutated settings" "DSN was overwritten" || pass "published-port PUT did not mutate settings"
 
-# The published port exposes only the redacted projection: folder yes, DSN no.
 body=$(curl -sf "$UMBREL_URL/api/settings")
 echo "$body" | grep -q '"default_folder"' && pass "published /api/settings exposes default_folder" || fail "published /api/settings" "missing 'default_folder'"
 echo "$body" | grep -q 'sentry_dsn' && fail "published /api/settings leaks sentry_dsn" "DSN present in response" || pass "published /api/settings omits sentry_dsn"

@@ -736,31 +736,22 @@ def _id_token_from_refresh(refresh_token: str, api_key: str) -> str:
     resp = requests.post(
         _SECURETOKEN_URL,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
-        # The key goes in params, not an f-string, so it stays out of any message
-        # we build from the URL ourselves.
         params={"key": api_key},
         data={"grant_type": "refresh_token", "refresh_token": refresh_token},
         timeout=10,
     )
-    # requests builds its message from the *final* URL, which carries
-    # ?key=<api_key>. That string gets logged by the retry decorator and shipped
-    # to Sentry, so replace it with one that has no query string.
+    # HTTPError's message includes ?key=<api_key>, which would reach logs and Sentry
     redacted = None
     try:
         resp.raise_for_status()
     except requests.HTTPError:
-        # `response=` is preserved: the retry decorator reads
-        # e.response.status_code to decide whether to retry.
+        # retry decorator reads e.response.status_code
         redacted = requests.HTTPError(
             f"{resp.status_code} {resp.reason} for url: {_SECURETOKEN_URL} (key redacted)",
             response=resp,
         )
     if redacted is not None:
-        # Raised outside the except block on purpose. `raise ... from None` would
-        # still leave __context__ pointing at the original exception (it only sets
-        # __suppress_context__, which affects display, not the attribute), and
-        # error reporters that walk the chain could surface the unredacted URL
-        # from there. Raising once the handler has exited leaves __context__ None.
+        # outside the except block so __context__ can't carry the unredacted URL
         raise redacted
     return resp.json()["id_token"]
 

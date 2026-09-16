@@ -23,8 +23,7 @@ services:
       - test_data:/data
     ports:
       - "3029:3029"
-      # Published only so the e2e script can assert on both listeners. In
-      # production this port is never published; app_proxy reaches it directly.
+      # settings listener; published only so e2e can reach it
       - "3031:3031"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3029/health"]

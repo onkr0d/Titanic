@@ -17,7 +17,6 @@ services:
       - BIND_ADDRESS=0.0.0.0:3029
       - SETTINGS_BIND_ADDRESS=0.0.0.0:3031
       - PLEX_MEDIA_PATH=/downloads
-      - DATA_DIR=/data
     volumes:
       - test_downloads:/downloads
       - test_data:/data

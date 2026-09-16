@@ -91,7 +91,6 @@ services:
     environment:
       - RUST_LOG=debug
       - MEDIA_PATH=/downloads
-      - DATA_DIR=/data
     networks:
       - titanic_dev_network
 

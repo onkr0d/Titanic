@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::State,
-    http::{StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
 use path_clean::PathClean;
@@ -12,6 +12,7 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use crate::AppState;
+use crate::error::AppError;
 
 // ---------------------------------------------------------------------------
 // Settings struct
@@ -135,6 +136,26 @@ pub async fn settings_page() -> impl IntoResponse {
         [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
         SETTINGS_HTML,
     )
+}
+
+/// Separate struct so a new `Settings` field can't leak onto the tailnet.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PublicSettings {
+    pub default_folder: Option<String>,
+}
+
+pub async fn get_public_settings(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<PublicSettings>, AppError> {
+    state.auth.verify_token(&headers).await?;
+
+    let path = Settings::file_path(&state.data_dir);
+    let settings = Settings::load(&path);
+
+    Ok(Json(PublicSettings {
+        default_folder: settings.default_folder,
+    }))
 }
 
 /// `GET /api/settings` — return current saved settings as JSON.

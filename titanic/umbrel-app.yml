@@ -1,11 +1,14 @@
 manifestVersion: 1
-id: titanic
+# Must match the app store directory name; the release job refuses to sync otherwise.
+id: sparkles-titanic
 name: Titanic
 tagline: Sink files to your Umbrel
 icon: http://ivans-mac:3000/titanic-icon-4.png
 category: Development
 version: "1.0.0"
-port: 3029
+# app_proxy serves the settings listener, which is never published to the host;
+# the upload API on 3029 is published (tailnet-only) for the VPS.
+port: 3031
 description: >-
   Titanic is a complete video upload and compression system that allows users to upload videos through a web interface, compress them on a backend server, and automatically upload them to an Umbrel device running Plex.
 developer: Ivan
@@ -18,12 +21,20 @@ gallery:
   - http://ivans-mac:3000/1.png
   - http://ivans-mac:3000/2.png
   - http://ivans-mac:3000/3.png
-releaseNotes: >-
-  Glorious release.
+# Single line on purpose: the release job rewrites this with sed.
+releaseNotes: "Glorious release."
 dependencies: []
 path: ""
 defaultUsername: ""
 defaultPassword: ""
+
+widgets:
+  - id: "firebase-project-id"
+    type: "text"
+    name: "Firebase Project ID"
+    description: "Your Firebase project ID for authentication"
+    required: true
+    value: ""
 
 # Permissions for accessing Plex media directory
 permissions:
@@ -34,7 +45,7 @@ permissions:
 app_proxy:
   default:
     container: app
-    port: 3029
+    port: 3031
     path: /
     initialCheck:
       path: /health

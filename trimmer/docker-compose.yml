@@ -1,6 +1,7 @@
 services:
   app:
     image: ghcr.io/onkr0d/titanic/trimmer:latest
+    # root: the bind mounts below are host-owned and uid 1000 cannot write them (see 80b9a9a)
     user: "0:0"
     restart: unless-stopped
     # no published ports on purpose: the app has no auth; Umbrel's app_proxy provides it

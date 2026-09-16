@@ -729,14 +729,30 @@ def retry_with_exponential_backoff(
     return decorator
 
 
+_SECURETOKEN_URL = "https://securetoken.googleapis.com/v1/token"
+
+
 def _id_token_from_refresh(refresh_token: str, api_key: str) -> str:
     resp = requests.post(
-        f"https://securetoken.googleapis.com/v1/token?key={api_key}",
+        _SECURETOKEN_URL,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
+        params={"key": api_key},
         data={"grant_type": "refresh_token", "refresh_token": refresh_token},
         timeout=10,
     )
-    resp.raise_for_status()
+    # HTTPError's message includes ?key=<api_key>, which would reach logs and Sentry
+    redacted = None
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError:
+        # retry decorator reads e.response.status_code
+        redacted = requests.HTTPError(
+            f"{resp.status_code} {resp.reason} for url: {_SECURETOKEN_URL} (key redacted)",
+            response=resp,
+        )
+    if redacted is not None:
+        # outside the except block so __context__ can't carry the unredacted URL
+        raise redacted
     return resp.json()["id_token"]
 
 

@@ -114,6 +114,16 @@ jobs:
           git clone https://x-access-token:${GH_TOKEN}@github.com/onkr0d/umbrel-apps.git umbrel_apps_temp
           cd umbrel_apps_temp/sparkles-titanic
 
+          # sync manifests; previously only the image line was updated
+          SRC="$GITHUB_WORKSPACE/titanic"
+          MANIFEST_ID="$(awk '$1=="id:"{print $2; exit}' "$SRC/umbrel-app.yml")"
+          if [ "$MANIFEST_ID" != "sparkles-titanic" ]; then
+            echo "::error::umbrel-app.yml id is '$MANIFEST_ID', expected 'sparkles-titanic'; refusing to sync"
+            exit 1
+          fi
+          cp "$SRC/docker-compose.yml" "$SRC/umbrel-app.yml" .
+          install -m 755 "$SRC/exports.sh" exports.sh
+
           CLEAN_VER="${TAG_NAME#v}"
           
           # Construct the exact reference: image:tag@sha256:....
@@ -127,7 +137,7 @@ jobs:
           NOTES="Update to ${TAG_NAME}. See full changelog: ${RELEASE_URL}"
           sed -i "s|releaseNotes: .*|releaseNotes: \"$NOTES\"|g" umbrel-app.yml
 
-          git add docker-compose.yml umbrel-app.yml
+          git add docker-compose.yml umbrel-app.yml exports.sh
           if git diff --staged --quiet; then
             echo "No changes detected."
           else

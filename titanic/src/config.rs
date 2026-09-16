@@ -5,6 +5,8 @@ use std::env;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub bind_address: String,
+    /// Settings listener; must never be published to the host.
+    pub settings_bind_address: String,
     pub firebase_project_id: String,
     pub plex_media_path: String,
     pub is_dev: bool,
@@ -18,6 +20,9 @@ pub struct Config {
 impl Config {
     pub fn from_env() -> Result<Self> {
         let bind_address = env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:3029".to_string());
+
+        let settings_bind_address =
+            env::var("SETTINGS_BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:3031".to_string());
 
         let firebase_project_id = env::var("FIREBASE_PROJECT_ID")
             .context("FIREBASE_PROJECT_ID environment variable is required")?;
@@ -52,6 +57,7 @@ impl Config {
 
         Ok(Config {
             bind_address,
+            settings_bind_address,
             firebase_project_id,
             plex_media_path,
             is_dev,

@@ -58,10 +58,10 @@ impl From<MultipartError> for AppError {
 
 const CONTENT_LENGTH_LIMIT: usize = 20 * 1024 * 1024 * 1024; // 20GB
 
-/// Build the axum router with all routes and middleware.
-/// Extracted from `main()` so integration tests can use it.
-/// State is consumed via `.with_state()`, so the returned router is `Router<()>`.
-pub fn build_router(state: Arc<AppState>) -> Router<()> {
+const SETTINGS_BODY_LIMIT: usize = 64 * 1024; // 64KB
+
+/// Published port (3029): every route verifies a token; no settings writes.
+pub fn build_public_router(state: Arc<AppState>) -> Router<()> {
     let cors = CorsLayer::new()
         .allow_origin([
             HeaderValue::from_static("https://titanic.ivan.boston"),
@@ -88,13 +88,25 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .route("/api/upload", post(upload_video))
         .route("/api/space", get(space_check))
         .route("/api/folders", get(list_folders))
-        .route("/", get(settings::settings_page))
-        .route("/settings", get(settings::settings_page))
-        .route("/api/settings", get(settings::get_settings).put(settings::put_settings))
+        .route("/api/settings", get(settings::get_public_settings))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(CONTENT_LENGTH_LIMIT))
+        .with_state(state)
+}
+
+/// Unpublished port (3031): no token checks, Umbrel's app_proxy is the auth.
+pub fn build_private_router(state: Arc<AppState>) -> Router<()> {
+    Router::new()
+        // app_proxy initialCheck
+        .route("/health", get(health_check))
+        .route("/", get(settings::settings_page))
+        .route("/settings", get(settings::settings_page))
+        .route("/api/settings", get(settings::get_settings).put(settings::put_settings))
+        .route("/api/folders", get(list_folders_local))
+        .layer(TraceLayer::new_for_http())
+        .layer(RequestBodyLimitLayer::new(SETTINGS_BODY_LIMIT))
         .with_state(state)
 }
 
@@ -232,7 +244,20 @@ async fn space_check(
 
 async fn list_folders(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
 ) -> Result<Json<FoldersResponse>, AppError> {
+    state.auth.verify_token(&headers).await?;
+
+    folders_response(&state).await
+}
+
+async fn list_folders_local(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<FoldersResponse>, AppError> {
+    folders_response(&state).await
+}
+
+async fn folders_response(state: &AppState) -> Result<Json<FoldersResponse>, AppError> {
     let folders = state.uploader.list_folders().await?;
 
     Ok(Json(FoldersResponse { folders }))

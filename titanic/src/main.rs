@@ -48,6 +48,7 @@ async fn main() -> Result<()> {
 
     // Create shared state
     let bind_addr = config.bind_address.clone();
+    let settings_bind_addr = config.settings_bind_address.clone();
     let state = Arc::new(AppState {
         auth,
         uploader,
@@ -55,14 +56,20 @@ async fn main() -> Result<()> {
         sentry_guard,
     });
 
-    // Build router
-    let app = titanic::build_router(state);
+    let public_app = titanic::build_public_router(state.clone());
+    let private_app = titanic::build_private_router(state);
 
     println!("Server starting on {bind_addr}");
     info!("Server starting on {bind_addr}");
+    info!("Settings server starting on {settings_bind_addr} (not published to the host)");
 
-    // Start server
-    let listener = TcpListener::bind(&bind_addr).await?;
-    axum::serve(listener, app).await?;
+    let public_listener = TcpListener::bind(&bind_addr).await?;
+    let private_listener = TcpListener::bind(&settings_bind_addr).await?;
+
+    tokio::try_join!(
+        async { axum::serve(public_listener, public_app).await },
+        async { axum::serve(private_listener, private_app).await },
+    )?;
+
     Ok(())
 }

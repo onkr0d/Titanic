@@ -47,7 +47,13 @@ impl Config {
                 .to_lowercase()
                 == "true";
 
-        let data_dir = if cfg!(target_os = "macos") { "./data" } else { "/data" }.to_string();
+        let data_dir = env::var("DATA_DIR").unwrap_or_else(|_| {
+            if cfg!(target_os = "macos") {
+                "./data".to_string()
+            } else {
+                "/data".to_string()
+            }
+        });
 
         Ok(Config {
             bind_address,

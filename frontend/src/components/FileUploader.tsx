@@ -43,9 +43,7 @@ const FileUploader = () => {
             } else {
                 setAvailableFolders([]);
                 setFoldersUnavailable(true);
-                // A silent outage went unnoticed for a week once; tell the user and Sentry.
                 Sentry.captureException(foldersResult.reason);
-                showToast.error("Couldn't load folders — the server may be down. Uploads will likely fail.");
             }
 
             const config = configResult.status === 'fulfilled' ? configResult.value : null;

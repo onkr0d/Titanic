@@ -83,7 +83,6 @@ export const getDiskSpace = async (): Promise<DiskSpaceInfo | null> => {
     }
 };
 
-// Throws on failure: an empty folder list and an unreachable backend must not look alike.
 export const getFolders = async (): Promise<string[]> => {
     const headers = await authHeaders();
     const response = await fetch(`${API_BASE_URL}/folders`, {

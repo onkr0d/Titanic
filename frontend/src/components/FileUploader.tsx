@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, X, Check, Clapperboard, Folder, Minimize2 } from 'lucide-react';
+import { UploadCloud, X, Check, Clapperboard, Folder, Minimize2, ServerCrash } from 'lucide-react';
 import { showToast } from '../utils/toast';
+import * as Sentry from '@sentry/react';
 import { uploadVideo, getFolders, getAppConfig } from '../utils/api';
 import Tooltip from './Tooltip';
 import { Switch } from './animate-ui/base/switch';
@@ -25,6 +26,7 @@ const FileUploader = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [files, setFiles] = useState<FileState[]>([]);
     const [availableFolders, setAvailableFolders] = useState<string[]>([]);
+    const [foldersUnavailable, setFoldersUnavailable] = useState(false);
     const [defaultFolder, setDefaultFolder] = useState<string>("Clips");
     const [shiftPressed, setShiftPressed] = useState(false);
     const [customSizeId, setCustomSizeId] = useState<string | null>(null);
@@ -33,8 +35,18 @@ const FileUploader = () => {
     // Fetch available folders and config on component mount
     useEffect(() => {
         const fetchFoldersAndConfig = async () => {
-            const [folders, config] = await Promise.all([getFolders(), getAppConfig()]);
-            setAvailableFolders(folders);
+            const [foldersResult, configResult] = await Promise.allSettled([getFolders(), getAppConfig()]);
+
+            if (foldersResult.status === 'fulfilled') {
+                setAvailableFolders(foldersResult.value);
+                setFoldersUnavailable(false);
+            } else {
+                setAvailableFolders([]);
+                setFoldersUnavailable(true);
+                Sentry.captureException(foldersResult.reason);
+            }
+
+            const config = configResult.status === 'fulfilled' ? configResult.value : null;
             if (config?.default_folder) {
                 setDefaultFolder(config.default_folder);
             }
@@ -329,15 +341,22 @@ const FileUploader = () => {
                                                                 {defaultFolder} <span className="text-[10px] ml-1 opacity-70">(Suggested)</span>
                                                             </div>
                                                         </DropdownMenuItem>
-                                                        {availableFolders.filter(f => f !== defaultFolder).map(folderName => (
-                                                            <DropdownMenuItem
-                                                                key={folderName}
-                                                                onClick={() => setFileFolder(id, folderName)}
-                                                                className={folder === folderName ? "bg-accent" : ""}
-                                                            >
-                                                                {folderName}
+                                                        {foldersUnavailable ? (
+                                                            <DropdownMenuItem disabled className="text-xs text-red-500 whitespace-nowrap">
+                                                                <ServerCrash className="w-3 h-3" />
+                                                                Server unreachable
                                                             </DropdownMenuItem>
-                                                        ))}
+                                                        ) : (
+                                                            availableFolders.filter(f => f !== defaultFolder).map(folderName => (
+                                                                <DropdownMenuItem
+                                                                    key={folderName}
+                                                                    onClick={() => setFileFolder(id, folderName)}
+                                                                    className={folder === folderName ? "bg-accent" : ""}
+                                                                >
+                                                                    {folderName}
+                                                                </DropdownMenuItem>
+                                                            ))
+                                                        )}
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
                                             </Tooltip>

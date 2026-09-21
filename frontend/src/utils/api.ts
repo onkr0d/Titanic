@@ -84,22 +84,17 @@ export const getDiskSpace = async (): Promise<DiskSpaceInfo | null> => {
 };
 
 export const getFolders = async (): Promise<string[]> => {
-    try {
-        const headers = await authHeaders();
-        const response = await fetch(`${API_BASE_URL}/folders`, {
-            headers
-        });
+    const headers = await authHeaders();
+    const response = await fetch(`${API_BASE_URL}/folders`, {
+        headers
+    });
 
-        if (!response.ok) {
-            throw new Error('Failed to fetch folders');
-        }
-
-        const data: FoldersResponse = await response.json();
-        return data.folders;
-    } catch (error) {
-        console.error('Error fetching folders:', error);
-        return [];
+    if (!response.ok) {
+        throw new Error(`Failed to fetch folders (HTTP ${response.status})`);
     }
+
+    const data: FoldersResponse = await response.json();
+    return data.folders;
 };
 
 export const getAppConfig = async (): Promise<AppConfig | null> => {

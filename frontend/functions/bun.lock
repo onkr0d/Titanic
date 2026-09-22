@@ -7,7 +7,7 @@
       "dependencies": {
         "@google-cloud/functions-framework": "^5.0.5",
         "firebase-admin": "^14.4.0",
-        "firebase-functions": "^7.3.2",
+        "firebase-functions": "^7.4.0",
       },
       "devDependencies": {
         "@typescript-eslint/eslint-plugin": "^8.70.0",
@@ -590,7 +590,7 @@
 
     "firebase-admin": ["firebase-admin@14.4.0", "", { "dependencies": { "@fastify/busboy": "^3.0.0", "@firebase/database-compat": "^2.1.4", "@firebase/database-types": "^1.0.20", "fast-deep-equal": "^3.1.1", "google-auth-library": "^10.6.2", "jsonwebtoken": "^9.0.0", "jwks-rsa": "^4.0.1" }, "optionalDependencies": { "@google-cloud/firestore": "^9.1.0", "@google-cloud/storage": "^8.1.0" } }, "sha512-yEx+GCsHvjH2svh4j1ATW57o8tlfjRQ0klTxvn7XCKUPXWiUQaRTHSzPSqhXtsLYSe4IwTqR7qqrh2sA45A0HA=="],
 
-    "firebase-functions": ["firebase-functions@7.3.2", "", { "dependencies": { "@types/cors": "^2.8.5", "@types/express": "^5.0.0", "cors": "^2.8.5", "express": "^5.2.1", "protobufjs": "^7.2.2" }, "peerDependencies": { "@apollo/server": "^5.2.0", "@as-integrations/express4": "^1.1.2", "firebase-admin": "^11.10.0 || ^12.0.0 || ^13.0.0 || ^14.0.0", "graphql": "^16.12.0" }, "optionalPeers": ["@apollo/server", "@as-integrations/express4", "graphql"], "bin": { "firebase-functions": "lib/bin/firebase-functions.js" } }, "sha512-DTa5CtCNxFE1gPjkjlhl5uh8AcNWXLKORAMRenfkecP8zGstbje+r2TaNh4Ehdxp0qTPvTUe/sS23VESW32Gbg=="],
+    "firebase-functions": ["firebase-functions@7.4.0", "", { "dependencies": { "@types/cors": "^2.8.5", "@types/express": "^5.0.0", "cors": "^2.8.5", "express": "^5.2.1", "protobufjs": "^7.2.2" }, "peerDependencies": { "@apollo/server": "^5.2.0", "@as-integrations/express4": "^1.1.2", "firebase-admin": "^11.10.0 || ^12.0.0 || ^13.0.0 || ^14.0.0", "graphql": "^16.12.0" }, "optionalPeers": ["@apollo/server", "@as-integrations/express4", "graphql"], "bin": { "firebase-functions": "lib/bin/firebase-functions.js" } }, "sha512-jR+c16q1E07dPVqU/sdbIEVEQJYSxjY6BFI+QR5/AvrnII8C6UkJv6fR8LJ+GKmcGUBe7SjO/MnEWLAeOiHWMw=="],
 
     "firebase-functions-test": ["firebase-functions-test@3.5.0", "", { "dependencies": { "@types/lodash": "^4.14.104", "lodash": "^4.17.5", "ts-deepmerge": "^2.0.1" }, "peerDependencies": { "firebase-admin": "^8.0.0 || ^9.0.0 || ^10.0.0 || ^11.0.0 || ^12.0.0 || ^13.0.0", "firebase-functions": ">=4.9.0", "jest": ">=28.0.0" } }, "sha512-Jg+f9GeWkWpgYRY9s+Oxst/b9kEnOJ6pU/XNFthOFYs2Ax2fU2Zxc7ckfTozYKEH/mzptSDxV5JYiPTvR+RhKA=="],
 

@@ -37,7 +37,7 @@ services:
     depends_on:
       - quart
     healthcheck:
-      test: ["CMD", "curl", "-f", "-k", "https://localhost/health"]
+      test: ["CMD", "curl", "-f", "--resolve", "compress.ivan.boston:443:127.0.0.1", "https://compress.ivan.boston/health"]
       interval: 30s
       timeout: 5s
       retries: 3

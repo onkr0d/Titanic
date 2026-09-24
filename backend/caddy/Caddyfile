@@ -8,12 +8,6 @@ http://compress.ivan.boston {
 	redir https://compress.ivan.boston
 }
 
-# for dev
-localhost:443 {
-	tls internal
-	reverse_proxy localhost:5000
-}
-
 # Proxy from port 5000
 compress.ivan.boston {
 	encode gzip

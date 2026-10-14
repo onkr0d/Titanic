@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/set-state-in-effect -- vendored animate-ui hook; syncs a controlled prop into local state as upstream does. */
+
 import * as React from 'react';
 
 interface CommonControlledStateProps<T> {

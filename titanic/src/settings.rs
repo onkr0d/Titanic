@@ -100,18 +100,25 @@ pub fn init_sentry(settings: &Settings) -> Option<sentry::ClientInitGuard> {
         })
         .unwrap_or(1.0);
 
+    // ClientOptions::traces_sample_rate panics outside [0, 1].
+    let traces_sample_rate = if (0.0..=1.0).contains(&traces_sample_rate) {
+        traces_sample_rate
+    } else {
+        warn!("Sentry traces_sample_rate={traces_sample_rate} is outside [0, 1]; using 1.0");
+        1.0
+    };
+
     info!("Initialising Sentry (environment={environment:?}, traces_sample_rate={traces_sample_rate})");
 
-    Some(sentry::init((
-        dsn,
-        sentry::ClientOptions {
-            release: sentry::release_name!(),
-            environment: environment.map(|v| v.into()),
-            send_default_pii: true,
-            traces_sample_rate,
-            ..Default::default()
-        },
-    )))
+    let mut options = sentry::ClientOptions::new()
+        .maybe_release(sentry::release_name!())
+        .send_default_pii(true)
+        .traces_sample_rate(traces_sample_rate);
+    if let Some(environment) = environment {
+        options = options.environment(environment);
+    }
+
+    Some(sentry::init((dsn, options)))
 }
 
 /// Re-initialise Sentry with new settings and store the guard.
@@ -234,6 +241,16 @@ mod tests {
         assert_eq!(loaded.sentry_environment, original.sentry_environment);
         assert_eq!(loaded.sentry_traces_sample_rate, original.sentry_traces_sample_rate);
         assert_eq!(loaded.default_folder, original.default_folder);
+    }
+
+    #[test]
+    fn init_sentry_tolerates_out_of_range_sample_rate() {
+        let settings = Settings {
+            sentry_dsn: Some("https://key@o0.ingest.sentry.io/0".into()),
+            sentry_traces_sample_rate: Some(5.0),
+            ..Default::default()
+        };
+        assert!(init_sentry(&settings).is_some());
     }
 
     #[test]

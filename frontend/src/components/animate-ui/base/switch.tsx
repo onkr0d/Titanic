@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable react-hooks/set-state-in-effect -- vendored animate-ui component; syncs a controlled prop into local state as upstream does. */
+
 import * as React from 'react';
 import { Switch as SwitchPrimitives } from '@base-ui-components/react/switch';
 import { motion, type HTMLMotionProps } from 'motion/react';

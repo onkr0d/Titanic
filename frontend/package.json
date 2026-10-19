@@ -24,7 +24,7 @@
     "caniuse-lite": "^1.0.30001816",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "firebase": "^12.10.0",
+    "firebase": "^13.0.0",
     "lucide-react": "^0.577.0",
     "motion": "^12.36.0",
     "mp4box": "^2.4.1",

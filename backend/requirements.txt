@@ -40,7 +40,7 @@ pyasn1==0.6.4
 pyasn1_modules==0.4.2
 pycparser==3.11
 PyJWT==2.15.1
-pylsqpack==0.3.24
+pylsqpack==1.0.0
 pyOpenSSL==26.4.0
 pyparsing==3.3.3
 Quart==0.23.1

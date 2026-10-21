@@ -6,6 +6,8 @@ compose=(docker compose -f docker-compose.run.yml)
 
 cfg="$(mktemp -d)"
 trap 'rm -rf "$cfg"' EXIT
+# A user-installed compose plugin lives under ~/.docker; keep it visible with the temp DOCKER_CONFIG.
+if [ -d ~/.docker/cli-plugins ]; then ln -s ~/.docker/cli-plugins "$cfg/cli-plugins"; fi
 DOCKER_CONFIG="$cfg" docker login ghcr.io -u "$1" --password-stdin
 DOCKER_CONFIG="$cfg" "${compose[@]}" pull
 

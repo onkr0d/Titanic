@@ -13,7 +13,8 @@ RUN apk add --no-cache \
 
 # Copy and install Python packages into /install
 COPY requirements.txt .
-RUN pip install --prefix=/install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -U 'pip>=26.2.2' && \
+    pip install --prefix=/install --no-cache-dir -r requirements.txt
 
 # Copy only the application source files needed
 COPY app.py .
@@ -28,8 +29,9 @@ COPY jobs/ jobs/
 FROM python:3.14-alpine
 WORKDIR /app
 
-# Install only runtime dependencies
-RUN apk add --no-cache \
+# Install only runtime dependencies (-u so the base image's ca-certificates gets upgraded)
+RUN apk add --no-cache -u ca-certificates && \
+    apk add --no-cache \
     ffmpeg \
     redis \
     curl \

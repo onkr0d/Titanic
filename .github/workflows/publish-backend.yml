@@ -68,11 +68,14 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Copy compose file to VPS
+      - name: Deploy to VPS
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           key_file="$(mktemp)"
           trap 'rm -f "$key_file"' EXIT
@@ -80,6 +83,9 @@ jobs:
           chmod 600 "$key_file"
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          target="${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}"
           scp -i "$key_file" -o BatchMode=yes \
-            backend/docker-compose.run.yml \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/opc/TitanicProd/docker-compose.run.yml
+            backend/docker-compose.run.yml backend/deploy.sh \
+            "$target":/home/opc/TitanicProd/
+          printf '%s' "$GHCR_TOKEN" | ssh -i "$key_file" -o BatchMode=yes "$target" \
+            bash /home/opc/TitanicProd/deploy.sh "${{ github.actor }}"

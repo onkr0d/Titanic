@@ -4,7 +4,7 @@ updates:
   - package-ecosystem: "bun"
     directory: "frontend/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
     groups:
       minor-patch:
         update-types:
@@ -15,7 +15,7 @@ updates:
   - package-ecosystem: "bun" # lfg wagmi
     directory: "frontend/functions/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
     groups:
       minor-patch:
         update-types:
@@ -26,7 +26,7 @@ updates:
   - package-ecosystem: "pip"
     directory: "backend/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
     groups:
       minor-patch:
         update-types:
@@ -37,7 +37,18 @@ updates:
   - package-ecosystem: "cargo"
     directory: "titanic/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
+    groups:
+      minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+          
+  # trimmer rust service
+  - package-ecosystem: "cargo"
+    directory: "trimmer/"
+    schedule:
+      interval: "daily"
     groups:
       minor-patch:
         update-types:
@@ -48,4 +59,4 @@ updates:
   - package-ecosystem: "docker"
     directory: "backend/"
     schedule:
-      interval: "weekly"
+      interval: "daily"

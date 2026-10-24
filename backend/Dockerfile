@@ -29,8 +29,8 @@ COPY jobs/ jobs/
 FROM python:3.14-alpine
 WORKDIR /app
 
-# Install only runtime dependencies (-u so the base image's ca-certificates gets upgraded)
-RUN apk add --no-cache -u ca-certificates && \
+# Upgrade base image packages first so security fixes land without waiting for a new python tag
+RUN apk upgrade --no-cache && \
     apk add --no-cache \
     ffmpeg \
     redis \

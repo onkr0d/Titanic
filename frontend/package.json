@@ -25,7 +25,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "firebase": "^13.0.0",
-    "lucide-react": "^0.577.0",
+    "lucide-react": "^1.61.0",
     "motion": "^14.4.0",
     "mp4box": "^2.4.1",
     "radix-ui": "^1.8.1",

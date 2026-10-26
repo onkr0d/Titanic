@@ -1,5 +1,5 @@
 # Builder Stage 
-FROM python:3.14-alpine AS builder
+FROM python:3.15-alpine AS builder
 
 # Set working dir for building
 WORKDIR /app
@@ -26,7 +26,7 @@ COPY jobs/ jobs/
 
 
 # Runtime Stage 
-FROM python:3.14-alpine
+FROM python:3.15-alpine
 WORKDIR /app
 
 # Upgrade base image packages first so security fixes land without waiting for a new python tag

@@ -3,7 +3,7 @@ attrs==26.1.0
 blinker==1.9.0
 CacheControl==0.14.4
 cachetools==7.2.4
-certifi==2026.10.19
+certifi==2026.10.23
 cffi==2.1.1
 charset-normalizer==3.5.2
 click==8.5.0
@@ -11,7 +11,7 @@ cryptography==50.0.2
 ffmpeg-python==0.2.0
 firebase-admin==7.7.0
 future==1.0.0
-google-api-core==2.42.0
+google-api-core==2.43.0
 google-auth==2.62.0
 google-auth-httplib2==0.4.4
 google-cloud-core==2.8.0
@@ -19,9 +19,9 @@ google-cloud-firestore==2.34.1
 google-cloud-storage==3.17.1
 google-crc32c==1.9.0
 google-resumable-media==2.11.0
-googleapis-common-protos==1.75.5
-grpcio==1.84.0
-grpcio-status==1.84.0
+googleapis-common-protos==1.76.0
+grpcio==1.84.1
+grpcio-status==1.84.1
 h11==0.16.0
 h2==4.4.1
 hpack==4.2.0
@@ -38,14 +38,14 @@ proto-plus==1.29.0
 protobuf==7.36.2
 pyasn1==0.6.4
 pyasn1_modules==0.4.2
-pycparser==3.11
+pycparser==3.12
 PyJWT==2.15.1
 pylsqpack==1.0.0
 pyOpenSSL==26.4.0
 pyparsing==3.3.3
 Quart==0.23.1
 quart-cors==0.8.0
-sentry-sdk[quart,rq]==2.72.0
+sentry-sdk[quart,rq]==2.73.0
 redis==8.1.0
 requests==2.34.2
 requests-toolbelt==1.0.0

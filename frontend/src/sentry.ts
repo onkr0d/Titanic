@@ -2,9 +2,8 @@ import * as Sentry from "@sentry/react";
 
 Sentry.init({
   dsn: import.meta.env.VITE_SENTRY_DSN,
-  // Setting this option to true will send default PII data to Sentry.
-  // For example, automatic IP address collection on events
-  sendDefaultPii: true,
+  // Send user info such as automatic IP address collection on events
+  dataCollection: { userInfo: true },
   integrations: [Sentry.browserTracingIntegration()],
 
   // Set tracesSampleRate to 1.0 to capture 100%

@@ -27,7 +27,7 @@
     "firebase": "^13.1.0",
     "lucide-react": "^1.61.0",
     "motion": "^14.6.0",
-    "mp4box": "^2.4.1",
+    "mp4box": "^2.5.0",
     "radix-ui": "^1.8.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

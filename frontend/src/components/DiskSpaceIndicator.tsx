@@ -50,7 +50,7 @@ const DiskSpaceIndicator = () => {
                 <Skeleton
                     name="disk-space"
                     loading={isLoading}
-                    fixture={<DiskSpaceContent info={PLACEHOLDER} />}
+                    fixture={<DiskSpaceContent info={PLACEHOLDER} showFill={false} />}
                     color="#d1d5db"
                     darkColor="#374151"
                     transition
@@ -69,23 +69,26 @@ const DiskSpaceIndicator = () => {
     );
 };
 
-const DiskSpaceContent = ({ info }: { info: DiskSpaceInfo }) => {
+// showFill=false leaves the track childless so boneyard captures it as a full-width bone
+const DiskSpaceContent = ({ info, showFill = true }: { info: DiskSpaceInfo; showFill?: boolean }) => {
     const usedPercentage = (info.used / info.total) * 100;
     const colorClass = usedPercentage > 80 ? 'bg-red-500' : usedPercentage > 50 ? 'bg-yellow-500' : 'bg-green-500';
 
     return (
         <div className="flex items-center gap-2">
             <Fish className="w-4 h-4 text-gray-600 dark:text-gray-300" />
-            <div className="flex flex-col w-full">
-                <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Disk space</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{formatBytes(info.used)} / {formatBytes(info.total)}</span>
+            <div className="flex flex-col gap-1.5 w-full">
+                <div className="flex items-baseline gap-2">
+                    <span className="text-sm leading-none font-medium text-gray-700 dark:text-gray-300">Disk space</span>
+                    <span className="text-xs leading-none text-gray-500 dark:text-gray-400">{formatBytes(info.used)} / {formatBytes(info.total)}</span>
                 </div>
                 <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div
-                        className={`h-full ${colorClass}`}
-                        style={{ width: `${usedPercentage}%` }}
-                    ></div>
+                    {showFill && (
+                        <div
+                            className={`h-full ${colorClass}`}
+                            style={{ width: `${usedPercentage}%` }}
+                        ></div>
+                    )}
                 </div>
             </div>
         </div>

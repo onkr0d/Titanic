@@ -38,6 +38,7 @@ if (import.meta.env.DEV) {
 
 const App = () => {
     const [user, setUser] = useState<User | null>(null);
+    const [authReady, setAuthReady] = useState(false);
 
     useEffect(() => {
         const auth = getAuth();
@@ -47,6 +48,7 @@ const App = () => {
         }
         onAuthStateChanged(auth, (user) => {
             setUser(user);
+            setAuthReady(true);
         });
     }, []);
 
@@ -83,6 +85,11 @@ const App = () => {
         }
     };
 
+    // a persisted session is restored asynchronously; don't flash the sign-in screen before it lands
+    if (!authReady) {
+        return <div className="bg-white dark:bg-gray-900 min-h-screen" />;
+    }
+
     if (!user) {
         return (
             <div className="bg-white dark:bg-gray-900 min-h-screen">
@@ -107,12 +114,7 @@ const App = () => {
                 <FileUploader />
             </div>
             <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 z-10">
-                <div className="md:hidden space-y-2">
-                    <DiskSpaceIndicator />
-                </div>
-                <div className="hidden md:block">
-                    <DiskSpaceIndicator />
-                </div>
+                <DiskSpaceIndicator />
             </div>
         </div>
     );

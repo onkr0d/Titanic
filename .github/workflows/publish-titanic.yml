@@ -60,6 +60,7 @@ jobs:
           # Separate caches for each architecture
           cache-from: type=gha,scope=titanic-${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=titanic-${{ matrix.suffix }}
+          no-cache-filters: runtime
           provenance: false
 
   # PHASE 2: Stitch them together into 'latest'

@@ -60,6 +60,7 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/trimmer:${{ steps.version.outputs.tag }}${{ matrix.suffix }}
           # Read from the DEV cache to speed up release builds!
           cache-from: type=gha,scope=trimmer-${{ matrix.suffix }}
+          no-cache-filters: runtime
           provenance: false
 
   # PHASE 2: Stitch, Release, and Update Umbrel

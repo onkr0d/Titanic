@@ -57,6 +57,7 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/trimmer:latest${{ matrix.suffix }}
           cache-from: type=gha,scope=trimmer-${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=trimmer-${{ matrix.suffix }}
+          no-cache-filters: runtime
           provenance: false
 
   # PHASE 2: Stitch them together into 'latest'

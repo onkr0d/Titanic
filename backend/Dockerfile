@@ -26,7 +26,7 @@ COPY jobs/ jobs/
 
 
 # Runtime Stage 
-FROM python:3.14-alpine
+FROM python:3.14-alpine AS runtime
 WORKDIR /app
 
 # Upgrade base image packages first so security fixes land without waiting for a new python tag
@@ -36,6 +36,9 @@ RUN apk upgrade --no-cache && \
     redis \
     curl \
     wget
+
+# pip is build-only; its vendored urllib3/msgpack/setuptools are unpatched
+RUN pip uninstall -y -q pip
 
 # Download RNNoise model for audio processing
 RUN mkdir -p /app/models && \

@@ -29,10 +29,10 @@ COPY static ./static
 RUN cargo build --release
 
 # Runtime stage
-FROM alpine:latest
+FROM alpine:latest AS runtime
 
 # Install runtime dependencies
-RUN apk add --no-cache \
+RUN apk upgrade --no-cache && apk add --no-cache \
     ca-certificates \
     ffmpeg
 

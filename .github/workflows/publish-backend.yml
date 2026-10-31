@@ -61,6 +61,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.target.scope }}
           cache-to: type=gha,mode=max,scope=${{ matrix.target.scope }}
+          no-cache-filters: runtime
           provenance: false
 
   deploy-compose:

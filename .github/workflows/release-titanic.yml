@@ -56,6 +56,7 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/titanic:${{ github.ref_name }}${{ matrix.suffix }}
           # Read from the DEV cache to speed up release builds!
           cache-from: type=gha,scope=titanic-${{ matrix.suffix }}
+          no-cache-filters: runtime
           provenance: false
 
   # PHASE 2: Stitch, Release, and Update Umbrel

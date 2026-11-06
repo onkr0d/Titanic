@@ -19,7 +19,7 @@
     "@rpldy/uploady": "^1.13.0",
     "@sentry/react": "^11.10.0",
     "@sentry/vite-plugin": "^11.10.0",
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.4",
     "axios": "^1.21.0",
     "boneyard-js": "^1.10.0",
     "caniuse-lite": "^1.0.30001820",
@@ -50,7 +50,7 @@
     "globals": "^17.14.0",
     "postcss": "^8.5.32",
     "shadcn": "^4.23.0",
-    "tailwindcss": "^4.3.3",
+    "tailwindcss": "^4.3.4",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.72.1",
     "vite": "^8.3.5"

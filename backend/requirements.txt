@@ -49,7 +49,7 @@ sentry-sdk[quart,rq]==2.74.0
 redis==8.1.0
 requests==2.34.2
 requests-toolbelt==1.0.0
-rq==2.12.0
+rq==3.0.0
 rsa==4.9.1
 service-identity==26.1.0
 uritemplate==4.2.0
